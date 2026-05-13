@@ -48,6 +48,9 @@ const columns: DataTableColumns = [
 ];
 
 async function loadData() {
+  if (searchForm.value.dateStart && searchForm.value.dateEnd && searchForm.value.dateEnd < searchForm.value.dateStart) {
+    window.$message?.warning('结束时间必须大于开始时间'); return;
+  }
   loading.value = true;
   const { data, error } = await fetchLoginLogs({
     account: searchForm.value.account || undefined,

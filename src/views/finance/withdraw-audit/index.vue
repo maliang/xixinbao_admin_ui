@@ -60,9 +60,10 @@ const columns = computed<DataTableColumns>(() => [
     ])
   },
   {
-    title: '金额信息', key: 'amount', width: 130,
+    title: '金额信息', key: 'amount', width: 150,
     render: (row: any) => h('div', {}, [
-      h('div', { style: 'font-size:14px;font-weight:bold;' }, { default: () => '¥' + parseFloat(row.amount || 0).toFixed(2) }),
+      h('div', { style: 'font-size:14px;font-weight:bold;' }, { default: () => '申请: ¥' + parseFloat(row.amount || 0).toFixed(2) }),
+      h('div', { style: 'font-size:12px;' }, { default: () => `汇率后: ¥${parseFloat(row.frozenAmount || row.amount || 0).toFixed(2)}` }),
       h('div', { style: 'font-size:11px;opacity:0.5;' }, { default: () => `手续费: ¥${parseFloat(row.feeAmount || 0).toFixed(2)}` }),
       h('div', { style: 'font-size:12px;font-weight:bold;color:#18a058;' }, { default: () => `实际到账: ¥${parseFloat(row.actualAmount || 0).toFixed(2)}` })
     ])
@@ -106,17 +107,25 @@ const columns = computed<DataTableColumns>(() => [
 // ========== 审核弹窗 ==========
 const auditVisible = ref(false);
 const auditRecord = ref<WithdrawRecord | null>(null);
-const auditFeeRate = ref('1');
+const auditFeeRate = ref('0');
 const auditFeeAmount = ref('');
 const auditActualAmount = ref('');
 const auditApplyAmount = ref('');
+const auditFrozenAmount = ref('');
+const auditStrategyFee = ref('');
 const auditResult = ref<string>('approved');
 const auditRejectReason = ref('');
 
 function openAudit(r: WithdrawRecord) {
   auditRecord.value = r;
   auditApplyAmount.value = String(r.amount || '');
-  auditFeeRate.value = String(r.feeRate || '1');
+  // frozenAmount = 汇率后金额（冻结金额）
+  const frozen = parseFloat(String((r as any).frozenAmount || r.amount || 0));
+  auditFrozenAmount.value = String(frozen.toFixed(2));
+  // 策略手续费（创建订单时已计算）
+  auditStrategyFee.value = String(parseFloat(String(r.feeAmount || 0)).toFixed(2));
+  // 审核时额外手续费比例默认为0
+  auditFeeRate.value = '0';
   auditFeeAmount.value = String(parseFloat(String(r.feeAmount || 0)).toFixed(2));
   // 直接用订单中已计算好的实际到账金额（含汇率）
   auditActualAmount.value = String(parseFloat(String(r.actualAmount || 0)).toFixed(2));
@@ -126,11 +135,16 @@ function openAudit(r: WithdrawRecord) {
 }
 
 function calcFee() {
-  const amount = parseFloat(auditApplyAmount.value) || 0;
-  const rate = parseFloat(auditFeeRate.value) || 0;
-  const fee = amount * rate / 100;
-  auditFeeAmount.value = fee.toFixed(2);
-  auditActualAmount.value = (amount - fee).toFixed(2);
+  const frozen = parseFloat(auditFrozenAmount.value) || 0;
+  const strategyFee = parseFloat(auditStrategyFee.value) || 0;
+  const auditRate = parseFloat(auditFeeRate.value) || 0;
+  // 审核额外手续费 = 冻结金额 × 审核手续费比例
+  const auditFee = frozen * auditRate / 100;
+  // 总手续费 = 策略手续费 + 审核额外手续费
+  const totalFee = strategyFee + auditFee;
+  auditFeeAmount.value = totalFee.toFixed(2);
+  // 实际到账 = 冻结金额 - 总手续费
+  auditActualAmount.value = (frozen - totalFee).toFixed(2);
 }
 watch(auditFeeRate, calcFee);
 
@@ -145,6 +159,9 @@ async function submitAudit() {
 }
 
 async function loadData() {
+  if (searchForm.value.dateStart && searchForm.value.dateEnd && searchForm.value.dateEnd < searchForm.value.dateStart) {
+    window.$message?.warning('结束时间必须大于开始时间'); return;
+  }
   loading.value = true;
   const { data, error } = await fetchWithdrawPending({ ...searchForm.value, page: currentPage.value, page_size: pageSize });
   loading.value = false;
@@ -209,10 +226,14 @@ onMounted(() => { loadData(); });
           </div>
           <div class="flex gap-16px">
             <div class="flex-1"><div class="text-13px op-50 mb-6px">申请金额</div><NInput :value="auditApplyAmount" disabled /></div>
-            <div class="flex-1"><div class="text-13px op-50 mb-6px">手续费比例</div><NInput v-model:value="auditFeeRate"><template #suffix><span class="op-50">%</span></template></NInput></div>
+            <div class="flex-1"><div class="text-13px op-50 mb-6px">汇率后金额(冻结)</div><NInput :value="auditFrozenAmount" disabled /></div>
           </div>
           <div class="flex gap-16px">
-            <div class="flex-1"><div class="text-13px op-50 mb-4px">手续费金额</div><div class="text-14px">{{ auditFeeAmount }}</div></div>
+            <div class="flex-1"><div class="text-13px op-50 mb-6px">策略手续费</div><NInput :value="auditStrategyFee" disabled /></div>
+            <div class="flex-1"><div class="text-13px op-50 mb-6px">审核额外手续费比例</div><NInput v-model:value="auditFeeRate"><template #suffix><span class="op-50">%</span></template></NInput></div>
+          </div>
+          <div class="flex gap-16px">
+            <div class="flex-1"><div class="text-13px op-50 mb-4px">总手续费金额</div><div class="text-14px">{{ auditFeeAmount }}</div></div>
             <div class="flex-1"><div class="text-13px op-50 mb-6px">实际到账金额</div><NInput v-model:value="auditActualAmount" /></div>
           </div>
           <div><div class="text-13px op-50 mb-8px">审核结果</div><NRadioGroup v-model:value="auditResult"><NRadio value="approved">通过</NRadio><NRadio value="rejected" class="ml-16px">拒绝</NRadio></NRadioGroup></div>

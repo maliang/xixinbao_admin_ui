@@ -51,17 +51,28 @@ function confirmBannerDelete(row: any) {
     }
   });
 }
+const movingBannerId = ref<number | null>(null);
+
 async function moveBanner(row: any, dir: 'up' | 'down') {
   const idx = banners.value.findIndex((b: any) => b.id === row.id);
   if (idx < 0) return;
   const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= banners.value.length) return;
+  if (swapIdx < 0 || swapIdx >= banners.value.length) {
+    window.$message?.warning(dir === 'up' ? '已经是第一个了' : '已经是最后一个了');
+    return;
+  }
+  movingBannerId.value = row.id;
   // 交换 sort 值并保存
   const currentSort = banners.value[idx].sort;
   const targetSort = banners.value[swapIdx].sort;
-  await updateBanner(row.id, { sort: targetSort });
-  await updateBanner(banners.value[swapIdx].id, { sort: currentSort });
-  loadBanners();
+  // 如果 sort 值相同，手动分配
+  const sortA = currentSort === targetSort ? targetSort - 1 : targetSort;
+  const sortB = currentSort === targetSort ? currentSort : currentSort;
+  await updateBanner(row.id, { sort: sortA });
+  await updateBanner(banners.value[swapIdx].id, { sort: sortB });
+  await loadBanners();
+  movingBannerId.value = null;
+  window.$message?.success('排序已更新');
 }
 
 // ========== 系统提示音 ==========
@@ -107,7 +118,13 @@ async function handleSave() {
     { group: 'notify', key: 'sound_custom_urls', value: JSON.stringify(customSoundUrls.value) }
   ];
   const { error } = await saveSettings(items);
-  if (!error) window.$message?.success('保存成功');
+  if (!error) {
+    window.$message?.success('保存成功');
+    // 通知 header-shortcuts 重新加载提示音配置，立即生效
+    if ((window as any).__reloadSoundConfig) {
+      (window as any).__reloadSoundConfig();
+    }
+  }
   else window.$message?.error('保存失败');
 }
 
@@ -200,7 +217,11 @@ loadSoundSettings();
               <div class="flex items-center gap-8px">
                 <a class="text-primary text-12px cursor-pointer" @click="openBannerEdit(row)">编辑</a>
                 <a class="text-red-500 text-12px cursor-pointer" @click="confirmBannerDelete(row)">删除</a>
-                <a class="text-12px op-60 cursor-pointer" @click="moveBanner(row, 'up')">上移</a>
+                <a
+                  class="text-12px cursor-pointer"
+                  :class="movingBannerId === row.id ? 'op-40 pointer-events-none' : 'op-60'"
+                  @click="moveBanner(row, 'up')"
+                >{{ movingBannerId === row.id ? '移动中...' : '上移' }}</a>
               </div>
             </td>
           </tr>

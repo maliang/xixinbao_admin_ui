@@ -96,6 +96,28 @@ function removeRewardRule(id: number) {
   if (idx !== -1) rewardRules.value.splice(idx, 1);
 }
 
+// ========== 累计签到奖励配置 ==========
+const cumulativeRewardType = ref<'amount' | 'points'>('amount');
+
+interface CumulativeRewardRule {
+  day: number | null;
+  reward: number | null;
+}
+
+const cumulativeRules = ref<CumulativeRewardRule[]>([
+  { day: null, reward: null },
+  { day: null, reward: null },
+  { day: null, reward: null },
+  { day: null, reward: null },
+  { day: null, reward: null },
+  { day: null, reward: null },
+  { day: null, reward: null }
+]);
+
+function allowOnlyDigits(value: string) {
+  return !value || /^\d*$/.test(value);
+}
+
 // ========== 加载设置 ==========
 async function loadSettings() {
   loading.value = true;
@@ -134,6 +156,20 @@ async function loadSettings() {
       }));
       ruleIdCounter = rewardRules.value.length + 1;
     }
+
+    // 累计签到奖励
+    const cumulative = data.cumulativeRewards || [];
+    cumulativeRewardType.value = s.cumulativeRewardType || 'amount';
+    if (cumulative.length) {
+      for (let i = 0; i < 7; i++) {
+        if (cumulative[i]) {
+          cumulativeRules.value[i] = {
+            day: cumulative[i].day ?? null,
+            reward: cumulative[i].reward ?? null
+          };
+        }
+      }
+    }
   }
 }
 
@@ -148,6 +184,7 @@ function buildPayload() {
       homepageRule: homepageRule.value,
       requiredDays: requiredDays.value,
       rewardType: rewardType.value,
+      cumulativeRewardType: cumulativeRewardType.value,
     },
     timeSlots: timeSlots.value.map(s => ({
       startTime: msToTimeStr(s.startTime),
@@ -158,7 +195,10 @@ function buildPayload() {
       rewardAmount: r.reward,
       randomMin: r.randomMin,
       randomMax: r.randomMax
-    }))
+    })),
+    cumulativeRewards: cumulativeRules.value
+      .filter(r => r.day !== null && r.reward !== null)
+      .map(r => ({ day: r.day, reward: r.reward }))
   };
 }
 
@@ -341,6 +381,58 @@ async function handlePublish() {
       <NButton type="primary" class="mt-16px" @click="addRewardRule">
         + 添加奖励规则
       </NButton>
+    </NCard>
+
+    <!-- 累计签到奖励配置 -->
+    <NCard :bordered="false" class="card-wrapper mb-16px">
+      <div class="text-16px font-bold mb-20px">累计签到奖励配置</div>
+
+      <!-- 奖励类型 -->
+      <div class="mb-16px">
+        <div class="text-14px font-500 mb-10px">奖励类型</div>
+        <div class="method-switch">
+          <button
+            class="method-btn"
+            :class="{ active: cumulativeRewardType === 'amount' }"
+            @click="cumulativeRewardType = 'amount'"
+          >
+            赠送金额
+          </button>
+          <button
+            class="method-btn"
+            :class="{ active: cumulativeRewardType === 'points' }"
+            @click="cumulativeRewardType = 'points'"
+          >
+            赠送积分
+          </button>
+        </div>
+      </div>
+
+      <!-- 累计奖励规则（固定7行） -->
+      <div class="flex flex-col gap-12px">
+        <div v-for="(rule, idx) in cumulativeRules" :key="idx" class="flex items-center gap-10px">
+          <span class="text-13px" style="flex-shrink: 0;">第</span>
+          <NInput
+            v-model:value="rule.day"
+            autosize
+            :allow-input="allowOnlyDigits"
+            size="small"
+            class="w-60px"
+            placeholder=""
+          />
+          <span class="text-13px" style="flex-shrink: 0;">天</span>
+          <span class="text-13px op-50 ml-12px" style="flex-shrink: 0;">{{ cumulativeRewardType === 'amount' ? '奖励金额' : '奖励积分' }}</span>
+          <NInput
+            v-model:value="rule.reward"
+            autosize
+            :allow-input="allowOnlyDigits"
+            size="small"
+            class="w-100px"
+            placeholder=""
+          />
+          <span class="text-13px op-50">{{ cumulativeRewardType === 'amount' ? '元' : '积分' }}</span>
+        </div>
+      </div>
     </NCard>
 
     <!-- 底部操作栏 -->

@@ -127,19 +127,32 @@ const editingNewsId = ref<number | null>(null);
 const publishForm = ref({
   title: '', categoryId: null as number | null, coverImage: '',
   contentType: 'original' as 'original' | 'external', content: '',
-  externalTitle: '', externalUrl: '', externalSummary: '',
+  externalTitle: '', externalUrl: '', summary: '',
   isTop: false, status: 'published' as 'published' | 'draft', publishedAt: null as number | null
 });
 
 function openPublish() {
   editingNewsId.value = null;
-  publishForm.value = { title: '', categoryId: null, coverImage: '', contentType: 'original', content: '', externalTitle: '', externalUrl: '', externalSummary: '', isTop: false, status: 'published', publishedAt: null };
+  publishForm.value = { title: '', categoryId: null, coverImage: '', contentType: 'original', content: '', externalTitle: '', externalUrl: '', summary: '', isTop: false, status: 'published', publishedAt: null };
   publishVisible.value = true;
 }
 
 function openEdit(r: NewsRecord) {
   editingNewsId.value = r.id;
-  publishForm.value = { title: r.title, categoryId: r.categoryId || null, coverImage: r.coverImage || '', contentType: r.contentType as any || 'original', content: r.content || '', externalTitle: '', externalUrl: '', externalSummary: '', isTop: !!r.isTop, status: r.status, publishedAt: null };
+  const row = r as any;
+  publishForm.value = {
+    title: r.title,
+    categoryId: r.categoryId || null,
+    coverImage: r.coverImage || '',
+    contentType: r.contentType as any || 'original',
+    content: r.content || '',
+    externalTitle: row.externalTitle || '',
+    externalUrl: row.externalUrl || '',
+    summary: row.summary || '',
+    isTop: !!r.isTop,
+    status: r.status,
+    publishedAt: r.publishedAt ? new Date(r.publishedAt).getTime() : null
+  };
   publishVisible.value = true;
 }
 
@@ -252,7 +265,7 @@ onMounted(() => { loadCategories(); loadData(); });
         <template v-if="publishForm.contentType === 'external'">
           <div><div class="text-13px font-500 mb-6px">外链标题</div><NInput v-model:value="publishForm.externalTitle" placeholder="输入外链新闻标题" /></div>
           <div><div class="text-13px font-500 mb-6px">外链地址</div><NInput v-model:value="publishForm.externalUrl" placeholder="https://example.com/news" /></div>
-          <div><div class="text-13px font-500 mb-6px">摘要说明</div><NInput v-model:value="publishForm.externalSummary" type="textarea" :rows="3" placeholder="简要描述外链内容..." /></div>
+          <div><div class="text-13px font-500 mb-6px">摘要说明</div><NInput v-model:value="publishForm.summary" type="textarea" :rows="3" placeholder="简要描述外链内容..." /></div>
         </template>
         <div class="flex gap-24px">
           <div><div class="text-13px font-500 mb-6px">置顶</div><div class="flex items-center gap-8px"><NSwitch v-model:value="publishForm.isTop" /><span class="text-13px op-60">设为置顶</span></div></div>

@@ -41,11 +41,11 @@ const reportData = ref<any[]>([]);
 
 const columns = [
   { title: '数据月份', key: 'month', width: 120 },
-  { title: '代理账号/姓名', key: 'account', width: 160, render: (row: any) => `${row.account}/${row.name}` },
-  { title: '团队业绩', key: 'team_amount', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.team_amount || 0) },
+  { title: '代理账号/姓名', key: 'account', width: 160, render: (row: any) => `${row.account || '-'}/${row.name || '-'}` },
+  { title: '团队业绩', key: 'teamAmount', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.teamAmount || 0) },
   { title: '个人佣金', key: 'commission', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.commission || 0) },
-  { title: '直接下线数', key: 'sub_count', width: 100, align: 'right' as const },
-  { title: '注册时间', key: 'created_at', width: 140 }
+  { title: '直接下线数', key: 'subCount', width: 100, align: 'right' as const },
+  { title: '注册时间', key: 'createdAt', width: 140, render: (row: any) => row.agentCreatedAt || row.createdAt || '-' }
 ];
 
 async function loadData() {

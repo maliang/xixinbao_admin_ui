@@ -102,8 +102,14 @@ function openEdit(row: any) {
   };
   modalVisible.value = true;
 }
+function allowOnlyDigits(value: string) {
+  return !value || /^\d+$/.test(value);
+}
+
 async function handleSave() {
   if (!formData.value.account) { window.$message?.warning('请输入账号'); return; }
+  if (!formData.value.id && !formData.value.invite_code) { window.$message?.warning('请输入邀请码'); return; }
+  if (formData.value.phone && !/^\d+$/.test(formData.value.phone)) { window.$message?.warning('手机号只能输入数字'); return; }
   const payload = {
     account: formData.value.account,
     name: formData.value.name,
@@ -187,9 +193,9 @@ onMounted(() => { loadAgentRoles(); loadData(); });
           <NInput v-model:value="formData.name" placeholder="请输入姓名" />
         </NFormItem>
         <NFormItem label="手机号">
-          <NInput v-model:value="formData.phone" placeholder="请输入手机号" />
+          <NInput v-model:value="formData.phone" placeholder="请输入手机号" :allow-input="allowOnlyDigits" />
         </NFormItem>
-        <NFormItem label="邀请码">
+        <NFormItem label="邀请码" required>
           <NInput v-model:value="formData.invite_code" placeholder="请输入邀请码" />
         </NFormItem>
         <NFormItem v-if="formData.id" :show-label="false">

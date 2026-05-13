@@ -39,6 +39,9 @@ const columns = [
 
 // ========== 数据加载 ==========
 async function loadData() {
+  if (startDate.value && endDate.value && endDate.value < startDate.value) {
+    window.$message?.warning('结束时间必须大于开始时间'); return;
+  }
   loading.value = true;
   const { data: resData, error } = await fetchOperationLogs({
     operator: operator.value || undefined,

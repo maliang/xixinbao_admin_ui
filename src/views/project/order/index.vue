@@ -17,21 +17,21 @@ const searchForm = ref({
   projectName: '',
   account: '',
   realName: '',
-  status: null as string | null,
+  status: '' as string,
   startDate: null as number | null,
   endDate: null as number | null,
   minAmount: null as number | null,
   maxAmount: null as number | null
 });
 const statusOptions = [
-  { label: '全部', value: null },
-  { label: '进行中', value: '进行中' },
-  { label: '已完成', value: '已完成' },
-  { label: '已退销', value: '已退销' }
+  { label: '全部', value: '' },
+  { label: '进行中', value: 'active' },
+  { label: '已完成', value: 'completed' },
+  { label: '已退销', value: 'cancelled' }
 ];
 
 function resetSearch() {
-  searchForm.value = { projectName: '', account: '', realName: '', status: null, startDate: null, endDate: null, minAmount: null, maxAmount: null };
+  searchForm.value = { projectName: '', account: '', realName: '', status: '', startDate: null, endDate: null, minAmount: null, maxAmount: null };
   currentPage.value = 1;
   loadData();
 }
@@ -181,6 +181,9 @@ function confirmRebate() {
 
 // ========== 数据加载 ==========
 async function loadData() {
+  if (searchForm.value.startDate && searchForm.value.endDate && searchForm.value.endDate < searchForm.value.startDate) {
+    window.$message?.warning('结束时间必须大于开始时间'); return;
+  }
   loading.value = true;
   const params: Record<string, any> = { page: currentPage.value, page_size: pageSize };
   if (searchForm.value.projectName) params.projectName = searchForm.value.projectName;

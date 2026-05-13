@@ -56,9 +56,10 @@ const columns = computed<DataTableColumns>(() => [
     ])
   },
   {
-    title: '金额信息', key: 'amount', width: 130,
+    title: '金额信息', key: 'amount', width: 150,
     render: (row: any) => h('div', {}, [
-      h('div', { style: 'font-size:14px;font-weight:bold;' }, { default: () => '¥' + parseFloat(row.amount || 0).toFixed(2) }),
+      h('div', { style: 'font-size:14px;font-weight:bold;' }, { default: () => '申请: ¥' + parseFloat(row.amount || 0).toFixed(2) }),
+      h('div', { style: 'font-size:12px;' }, { default: () => `汇率后: ¥${parseFloat(row.frozenAmount || row.amount || 0).toFixed(2)}` }),
       h('div', { style: 'font-size:11px;opacity:0.5;' }, { default: () => `手续费: ¥${parseFloat(row.feeAmount || 0).toFixed(2)}` }),
       h('div', { style: 'font-size:12px;font-weight:bold;color:#18a058;' }, { default: () => `实际到账: ¥${parseFloat(row.actualAmount || 0).toFixed(2)}` })
     ])
@@ -119,6 +120,9 @@ function handleDelete(r: WithdrawRecord) {
 }
 
 async function loadData() {
+  if (searchForm.value.dateStart && searchForm.value.dateEnd && searchForm.value.dateEnd < searchForm.value.dateStart) {
+    window.$message?.warning('结束时间必须大于开始时间'); return;
+  }
   loading.value = true;
   const { data, error } = await fetchWithdrawHistory({ ...searchForm.value, page: currentPage.value, page_size: pageSize });
   loading.value = false;
@@ -183,11 +187,15 @@ onMounted(() => { loadData(); });
           </div>
           <div class="flex gap-16px mb-12px">
             <div class="flex-1"><div class="text-13px op-50 mb-4px">申请金额</div><div class="text-14px">¥{{ detailRecord.amount }}</div></div>
+            <div class="flex-1"><div class="text-13px op-50 mb-4px">汇率后金额</div><div class="text-14px">¥{{ (detailRecord as any).frozenAmount || detailRecord.amount }}</div></div>
+          </div>
+          <div class="flex gap-16px mb-12px">
             <div class="flex-1"><div class="text-13px op-50 mb-4px">手续费</div><div class="text-14px">¥{{ detailRecord.feeAmount }}</div></div>
+            <div class="flex-1"><div class="text-13px op-50 mb-4px">实际到账</div><div class="text-16px font-bold" style="color:#18a058;">¥{{ detailRecord.actualAmount }}</div></div>
           </div>
           <div class="flex gap-16px mb-20px">
-            <div class="flex-1"><div class="text-13px op-50 mb-4px">实际到账</div><div class="text-16px font-bold" style="color:#18a058;">¥{{ detailRecord.actualAmount }}</div></div>
             <div class="flex-1"><div class="text-13px op-50 mb-4px">状态</div><NTag v-if="statusMap[detailRecord.status]" :type="statusMap[detailRecord.status].type" size="small" :bordered="false">{{ statusMap[detailRecord.status].label }}</NTag><span v-else>-</span></div>
+            <div class="flex-1"></div>
           </div>
           <div class="section-divider">到账信息</div>
           <div class="flex gap-16px mb-20px">

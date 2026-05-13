@@ -294,6 +294,9 @@ export function updateShippingLogistics(id: number, data: Record<string, any>) {
 export function fetchMessages(params: Record<string, any>) {
   return request({ url: '/messages', params });
 }
+export function fetchMessageDetail(id: number) {
+  return request({ url: `/messages/${id}` });
+}
 export function createMessage(data: Record<string, any>) {
   return request({ url: '/messages', method: 'post', data });
 }

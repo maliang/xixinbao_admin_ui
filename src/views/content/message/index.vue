@@ -53,8 +53,8 @@ const typeColorMap: Record<string, { type: 'info' | 'success' | 'warning' | 'def
 const typeNameMap: Record<string, string> = {
   system: '系统通知', promo: '活动促销', security: '安全预警', other: '其他'
 };
-const statusConfig: Record<string, { type: 'success' | 'warning' | 'default'; label: string }> = {
-  sent: { type: 'success', label: '已发送' }, pending: { type: 'warning', label: '待发送' }, draft: { type: 'default', label: '草稿' }
+const statusConfig: Record<string, { type: 'success' | 'warning' | 'default' | 'info'; label: string }> = {
+  sent: { type: 'success', label: '已发送' }, pending: { type: 'info', label: '定时待发' }, draft: { type: 'default', label: '草稿' }
 };
 
 const columns = computed<DataTableColumns>(() => [
@@ -106,12 +106,22 @@ function openCreate() {
   editVisible.value = true;
 }
 
-function openEdit(r: MessageRecord) {
+async function openEdit(r: MessageRecord) {
+  // 先获取消息详情（含目标用户账号）
+  const { fetchMessageDetail } = await import('@/service/api');
+  const { data, error } = await fetchMessageDetail(r.id);
+  const detail = !error && data ? data : r;
+
   editForm.value = {
     id: r.id,
-    targetType: r.targetType === 'all' ? 'all' : 'specific',
-    targetMembers: [],
-    title: r.title, messageType: r.type, content: r.content, image: r.image || '', publishType: 'now', scheduleTime: null
+    targetType: (detail.targetType || detail.target_type || 'all') === 'all' ? 'all' : 'specific',
+    targetMembers: detail.targetMembers || detail.target_members || [],
+    title: detail.title || r.title,
+    messageType: detail.type || detail.messageType || r.type,
+    content: detail.content || r.content,
+    image: detail.image || r.image || '',
+    publishType: 'now',
+    scheduleTime: null
   };
   editVisible.value = true;
 }
@@ -130,29 +140,50 @@ function handleDelete(r: MessageRecord) {
 
 async function handleSave(action: 'draft' | 'send') {
   const editingId = editForm.value.id;
+  // 构建 payload，将 messageType 映射为 type
+  function buildPayload() {
+    const { messageType, publishType, scheduleTime, ...rest } = editForm.value;
+    const payload: Record<string, any> = { ...rest, type: messageType, publishType, scheduleTime };
+    return payload;
+  }
+
   if (editingId) {
     // 编辑模式：先更新内容
-    const payload = { ...editForm.value };
-    delete (payload as any).id;
+    const payload = buildPayload();
+    delete payload.id;
     if (action === 'draft') payload.status = 'draft';
     const { error } = await updateMessage(editingId, payload);
     if (!error) {
       // 如果选择发送，调用发送接口
-      if (action === 'send') await sendMessage(editingId);
+      if (action === 'send' && editForm.value.publishType === 'now') await sendMessage(editingId);
       window.$message?.success('操作成功'); editVisible.value = false; loadData();
     } else { window.$message?.error(error?.msg || '操作失败'); }
   } else {
-    // 新增模式：后端 save 方法根据 status 直接处理
-    const payload = { ...editForm.value, status: action === 'send' ? 'sent' : 'draft' };
-    delete (payload as any).id;
+    // 新增模式
+    const payload = buildPayload();
+    delete payload.id;
+    if (action === 'send') {
+      if (editForm.value.publishType === 'schedule' && editForm.value.scheduleTime) {
+        // 定时发布：后端会设为 pending
+        payload.status = 'sent'; // 标记意图为发送，后端根据 publishType 判断
+      } else {
+        payload.status = 'sent';
+      }
+    } else {
+      payload.status = 'draft';
+    }
     const { error } = await createMessage(payload);
     if (!error) {
-      window.$message?.success('操作成功'); editVisible.value = false; loadData();
+      window.$message?.success(editForm.value.publishType === 'schedule' ? '定时发布设置成功' : '操作成功');
+      editVisible.value = false; loadData();
     } else { window.$message?.error(error?.msg || '操作失败'); }
   }
 }
 
 async function loadData() {
+  if (searchForm.value.dateStart && searchForm.value.dateEnd && searchForm.value.dateEnd < searchForm.value.dateStart) {
+    window.$message?.warning('结束时间必须大于开始时间'); return;
+  }
   loading.value = true;
   const params: Record<string, any> = { page: currentPage.value, page_size: pageSize };
   if (searchForm.value.keyword) params.keyword = searchForm.value.keyword;

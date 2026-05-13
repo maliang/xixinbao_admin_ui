@@ -72,6 +72,9 @@ async function loadSoundConfig() {
       }
     }
   } catch { /* 静默 */ }
+  // 配置更新后停止当前播放，然后根据新配置立即重新判断
+  stopSound();
+  checkAndPlaySound(prevCounts);
 }
 
 // 音频缓存（预加载，避免每次播放都请求文件）
@@ -89,6 +92,12 @@ function getOrCreateAudio(src: string): HTMLAudioElement {
 let pendingPlay: { soundKey: string; loop: boolean } | null = null;
 let userInteracted = false;
 
+// 循环播放队列相关
+let loopQueue: string[] = []; // 需要循环播放的音频 key 列表
+let loopIndex = 0; // 当前播放到队列中的哪个
+let loopTimer: ReturnType<typeof setTimeout> | null = null;
+let isLooping = false;
+
 function playSound(soundKey: string, loop = false) {
   const src = getSoundUrl(soundKey);
   try {
@@ -97,7 +106,7 @@ function playSound(soundKey: string, loop = false) {
       audioInstance.currentTime = 0;
     }
     audioInstance = getOrCreateAudio(src);
-    audioInstance.loop = loop;
+    audioInstance.loop = false; // 不使用原生 loop，由队列控制
     audioInstance.currentTime = 0;
     audioInstance.play().then(() => {
       userInteracted = true;
@@ -108,11 +117,69 @@ function playSound(soundKey: string, loop = false) {
   } catch { /* 静默 */ }
 }
 
+/**
+ * 启动循环播放队列：按顺序播放，每个铃声播放完后间隔3秒播放下一个
+ */
+function startLoopQueue(soundKeys: string[]) {
+  if (!soundKeys.length) return;
+  // 如果队列内容没变且正在循环中，不重启
+  if (isLooping && JSON.stringify(loopQueue) === JSON.stringify(soundKeys)) return;
+
+  stopLoopQueue();
+  loopQueue = [...soundKeys];
+  loopIndex = 0;
+  isLooping = true;
+  playNextInQueue();
+}
+
+function playNextInQueue() {
+  if (!isLooping || !loopQueue.length) return;
+  if (loopIndex >= loopQueue.length) loopIndex = 0;
+
+  const soundKey = loopQueue[loopIndex];
+  const src = getSoundUrl(soundKey);
+
+  if (audioInstance) {
+    audioInstance.pause();
+    audioInstance.currentTime = 0;
+  }
+  audioInstance = getOrCreateAudio(src);
+  audioInstance.loop = false;
+  audioInstance.currentTime = 0;
+  audioInstance.play().then(() => {
+    userInteracted = true;
+    pendingPlay = null;
+  }).catch(() => {
+    pendingPlay = { soundKey, loop: true };
+  });
+
+  // 监听播放结束，间隔3秒后播放下一个
+  audioInstance.onended = () => {
+    if (!isLooping) return;
+    loopIndex++;
+    loopTimer = setTimeout(playNextInQueue, 3000);
+  };
+}
+
+function stopLoopQueue() {
+  isLooping = false;
+  loopQueue = [];
+  loopIndex = 0;
+  if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
+  if (audioInstance) {
+    audioInstance.onended = null;
+  }
+}
+
 // 用户首次交互时尝试播放被阻止的音频
 function onUserInteraction() {
   if (!userInteracted && pendingPlay) {
     userInteracted = true;
-    playSound(pendingPlay.soundKey, pendingPlay.loop);
+    if (isLooping) {
+      playNextInQueue();
+    } else {
+      playSound(pendingPlay.soundKey, pendingPlay.loop);
+    }
     document.removeEventListener('click', onUserInteraction);
     document.removeEventListener('keydown', onUserInteraction);
   }
@@ -121,7 +188,9 @@ document.addEventListener('click', onUserInteraction, { once: false });
 document.addEventListener('keydown', onUserInteraction, { once: false });
 
 function stopSound() {
+  stopLoopQueue();
   if (audioInstance) {
+    audioInstance.onended = null;
     audioInstance.pause();
     audioInstance.currentTime = 0;
     audioInstance = null;
@@ -141,6 +210,11 @@ function checkAndPlaySound(counts: Record<string, number>) {
     orders: 'order'
   };
 
+  // 收集所有需要循环播放的铃声
+  const loopSounds: string[] = [];
+  let hasOnce = false;
+  let hasInterval = false;
+
   for (const [countKey, configKey] of Object.entries(keyMap)) {
     const config = soundConfigs.find(c => c.key === configKey);
     if (!config || !config.enabled) continue;
@@ -148,31 +222,34 @@ function checkAndPlaySound(counts: Record<string, number>) {
     const current = counts[countKey] || 0;
     const prev = prevCounts[countKey] || 0;
 
-    // loop 模式：只要有待处理事件就循环播放，处理完后停止
+    // loop 模式：收集所有有待处理事件的铃声
     if (config.mode === 'loop' && current > 0) {
-      if (!audioInstance || audioInstance.paused) {
-        playSound(config.sound, true);
-      }
-      break;
+      loopSounds.push(config.sound);
     }
-    // loop 模式：处理完后停止
-    if (config.mode === 'loop' && current === 0 && audioInstance) {
-      stopSound();
-    }
+    // loop 模式：处理完后从队列移除（下面统一处理）
+
     // once 模式：只在新增时播放一次（首次加载不播放）
-    if (config.mode === 'once' && !isFirstLoad && current > prev && current > 0) {
+    if (config.mode === 'once' && !isFirstLoad && current > prev && current > 0 && !hasOnce) {
       playSound(config.sound, false);
-      break;
+      hasOnce = true;
     }
     // interval 模式：每隔5分钟响铃一次（只要有待处理事件）
-    if (config.mode === 'interval' && current > 0) {
+    if (config.mode === 'interval' && current > 0 && !hasInterval) {
       const now = Date.now();
       if (now - lastIntervalPlayTime >= 5 * 60 * 1000) {
         playSound(config.sound, false);
         lastIntervalPlayTime = now;
+        hasInterval = true;
       }
-      break;
     }
+  }
+
+  // 处理循环播放队列
+  if (loopSounds.length > 0) {
+    startLoopQueue(loopSounds);
+  } else if (isLooping) {
+    // 所有循环事件都已处理完，停止循环
+    stopSound();
   }
 
   prevCounts = { ...counts };
@@ -226,12 +303,13 @@ onMounted(async () => {
 
   // 暴露刷新方法
   (window as any).__refreshPendingCounts = loadPendingCounts;
+  (window as any).__reloadSoundConfig = loadSoundConfig;
 });
 
 onUnmounted(() => {
   if (timer) clearInterval(timer);
   if (pollTimer) clearInterval(pollTimer);
-  if (audioInstance) { audioInstance.pause(); audioInstance = null; }
+  stopSound();
 });
 </script>
 

@@ -188,6 +188,9 @@ async function submitAdjust() {
 
 // ========== 数据加载 ==========
 async function loadData() {
+  if (searchForm.value.dateStart && searchForm.value.dateEnd && searchForm.value.dateEnd < searchForm.value.dateStart) {
+    window.$message?.warning('结束时间必须大于开始时间'); return;
+  }
   loading.value = true;
   const params: Record<string, any> = {
     page: currentPage.value,
