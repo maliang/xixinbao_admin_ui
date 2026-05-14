@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { ref, h, computed, onMounted, watch, resolveComponent } from 'vue';
 import {
-  NCard, NDataTable, NButton, NSpace, NInput, NSelect, NSwitch, NPagination,
-  NModal, NForm, NFormItem, NInputNumber, useDialog
+  NCard, NDataTable, NButton, NSpace, NTag, NInput, NSelect, NSwitch, NPagination,
+  NModal, NForm, NFormItem, NInputNumber, NTabs, NTabPane, useDialog
 } from 'naive-ui';
-import { fetchProjectCategories, createProjectCategory, updateProjectCategory, deleteProjectCategory, toggleProjectCategoryStatus } from '@/service/api';
+import { fetchProjectCategories, fetchProjectCategoryDetail, createProjectCategory, updateProjectCategory, deleteProjectCategory, toggleProjectCategoryStatus } from '@/service/api';
 import ImageUpload from '@/components/common/ImageUpload.vue';
 import { useAuthStore } from '@/store/modules/auth';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'ProjectCategoryPage' });
 
 const dialog = useDialog();
 const authStore = useAuthStore();
+
+// 多语言编辑器（可翻译字段：name）
+const {
+  currentLang, locales, formFields, switchLang, initEditor, buildPayload, loadLocales
+} = useLanguageEditor({ fields: ['name'] });
 
 // ========== 筛选 ==========
 const keyword = ref('');
@@ -30,8 +36,6 @@ const totalRecords = ref(0);
 
 // ========== 表格数据 ==========
 const categories = ref<any[]>([]);
-
-const totalCount = computed(() => categories.value.length);
 
 const columns = [
   {
@@ -53,6 +57,13 @@ const columns = [
     render: (row: any) => h(NSwitch, { value: row.status, size: 'small', onUpdateValue: () => handleToggleStatus(row) })
   },
   {
+    title: '语言', key: 'locales', width: 120,
+    render: (row: any) => {
+      const locales = row.locales || ['zh-CN'];
+      return h(NSpace, { size: 4 }, () => locales.map((code: string) => h(NTag, { size: 'tiny', bordered: false }, () => code)));
+    }
+  },
+  {
     title: '操作', key: 'action', width: 150, align: 'right' as const,
     render: (row: any) => h(NSpace, { size: 4, justify: 'end' }, () => [
       authStore.hasPermission('project.category.edit') ? h(NButton, { size: 'small', quaternary: true, type: 'primary', onClick: () => openEdit(row) }, () => [
@@ -72,7 +83,6 @@ const modalVisible = ref(false);
 const modalTitle = ref('新建分类');
 const formData = ref({
   id: null as number | null,
-  name: '',
   logo: '' as string,
   sort: 1,
   status: true,
@@ -82,13 +92,23 @@ const formData = ref({
 
 function openCreate() {
   modalTitle.value = '新建分类';
-  formData.value = { id: null, name: '', logo: '', sort: 1, status: true, showHome: false, description: '' };
+  formData.value = { id: null, logo: '', sort: 1, status: true, showHome: false, description: '' };
+  initEditor({ name: '' }, {});
   modalVisible.value = true;
 }
 
-function openEdit(row: any) {
+async function openEdit(row: any) {
   modalTitle.value = '编辑分类';
-  formData.value = { id: row.id, name: row.name, logo: row.logo || '', sort: row.sort, status: row.status, showHome: false, description: '' };
+  formData.value = { id: row.id, logo: row.logo || '', sort: row.sort, status: row.status, showHome: false, description: '' };
+
+  // 从详情接口获取完整 translations 数据
+  const { data, error } = await fetchProjectCategoryDetail(row.id);
+  if (!error && data) {
+    const translations = data.translations || {};
+    initEditor({ name: data.name || '' }, translations);
+  } else {
+    initEditor({ name: row.name || '' }, {});
+  }
   modalVisible.value = true;
 }
 
@@ -97,8 +117,17 @@ function handleSave() {
 }
 
 async function doSave() {
-  const payload: Record<string, any> = { name: formData.value.name, sort: formData.value.sort, status: formData.value.status };
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+
+  const payload: Record<string, any> = {
+    name: zhFields.name,
+    sort: formData.value.sort,
+    status: formData.value.status,
+    translations: translationsJson
+  };
   if (formData.value.logo) payload.logo = formData.value.logo;
+
   if (formData.value.id) {
     const { error } = await updateProjectCategory(formData.value.id, payload);
     if (!error) {
@@ -109,7 +138,7 @@ async function doSave() {
       window.$message?.error(error?.msg || '操作失败');
     }
   } else {
-    const { error } = await createProjectCategory({ ...payload, showHome: (formData.value as any).showHome, description: (formData.value as any).description });
+    const { error } = await createProjectCategory({ ...payload, showHome: formData.value.showHome, description: formData.value.description });
     if (!error) {
       window.$message?.success('创建成功');
       modalVisible.value = false;
@@ -170,9 +199,7 @@ async function loadData() {
 }
 
 watch(currentPage, loadData);
-onMounted(() => { loadData(); });
-
-
+onMounted(() => { loadLocales(); loadData(); });
 </script>
 
 <template>
@@ -217,36 +244,44 @@ onMounted(() => { loadData(); });
     <!-- 新建/编辑弹窗 -->
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 500px;" :bordered="false">
       <NForm label-placement="top" size="small">
-        <!-- 新建时 Logo 在最上面 -->
-        <NFormItem v-if="modalTitle === '新建分类'" label="分类Logo">
+        <!-- Language Tab -->
+        <NTabs v-if="locales.length > 1" :value="currentLang" type="segment" size="small" @update:value="switchLang" class="mb-16px">
+          <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+        </NTabs>
+
+        <!-- 新建时 Logo 在最上面（仅 zh-CN 时显示） -->
+        <NFormItem v-if="modalTitle === '新建分类' && currentLang === 'zh-CN'" label="分类Logo">
           <ImageUpload v-model="formData.logo" />
         </NFormItem>
 
         <NFormItem label="分类名称">
-          <NInput v-model:value="formData.name" placeholder="请输入分类名称" />
+          <NInput v-model:value="formFields.name" placeholder="请输入分类名称" />
         </NFormItem>
 
-        <!-- 编辑时 Logo 在名称后面 -->
-        <NFormItem v-if="modalTitle === '编辑分类'" label="分类Logo">
+        <!-- 编辑时 Logo 在名称后面（仅 zh-CN 时显示） -->
+        <NFormItem v-if="modalTitle === '编辑分类' && currentLang === 'zh-CN'" label="分类Logo">
           <ImageUpload v-model="formData.logo" />
         </NFormItem>
 
-        <NFormItem label="排序值">
-          <NInputNumber v-model:value="formData.sort" class="w-full" />
-        </NFormItem>
-
-        <NFormItem label="启用状态">
-          <NSwitch v-model:value="formData.status" />
-        </NFormItem>
-
-        <!-- 新建时额外字段 -->
-        <template v-if="modalTitle === '新建分类'">
-          <NFormItem label="置顶到首页显示">
-            <NSwitch v-model:value="formData.showHome" />
+        <!-- 以下字段仅在 zh-CN 时显示（非翻译字段） -->
+        <template v-if="currentLang === 'zh-CN'">
+          <NFormItem label="排序值">
+            <NInputNumber v-model:value="formData.sort" class="w-full" />
           </NFormItem>
-          <NFormItem label="分类描述">
-            <NInput v-model:value="formData.description" type="textarea" :rows="4" placeholder="请输入分类描述（最多500字符）" />
+
+          <NFormItem label="启用状态">
+            <NSwitch v-model:value="formData.status" />
           </NFormItem>
+
+          <!-- 新建时额外字段 -->
+          <template v-if="modalTitle === '新建分类'">
+            <NFormItem label="置顶到首页显示">
+              <NSwitch v-model:value="formData.showHome" />
+            </NFormItem>
+            <NFormItem label="分类描述">
+              <NInput v-model:value="formData.description" type="textarea" :rows="4" placeholder="请输入分类描述（最多500字符）" />
+            </NFormItem>
+          </template>
         </template>
       </NForm>
 

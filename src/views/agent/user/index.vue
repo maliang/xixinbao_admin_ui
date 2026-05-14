@@ -85,6 +85,17 @@ async function loadAgentRoles() {
   }
 }
 
+async function loadParentOptions() {
+  const { data, error } = await fetchAgents({ pageSize: 200 });
+  if (!error && data) {
+    const list = data.list || [];
+    parentOptions.value = [
+      { label: '无', value: '' },
+      ...list.map((a: any) => ({ label: `${a.account}${a.name ? ' (' + a.name + ')' : ''}`, value: String(a.id) }))
+    ];
+  }
+}
+
 function openCreate() {
   modalTitle.value = '新增代理';
   formData.value = { id: null, account: '', name: '', phone: '', invite_code: '', reset_password: false, parent_id: null, role_id: null, commission_rate: null, status: true };
@@ -143,7 +154,7 @@ function confirmDelete(row: any) {
   });
 }
 
-onMounted(() => { loadAgentRoles(); loadData(); });
+onMounted(() => { loadAgentRoles(); loadParentOptions(); loadData(); });
 </script>
 
 <template>

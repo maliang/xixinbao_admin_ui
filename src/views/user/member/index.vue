@@ -400,6 +400,12 @@ function handleBatchDelete() {
       </NCard>
     </div>
 
+    <!-- 分页 -->
+    <div v-if="totalRecords > pageSize" class="flex items-center justify-between mt-16px">
+      <span class="text-13px op-50">共 {{ totalRecords }} 条记录</span>
+      <NPagination v-model:page="currentPage" :page-count="Math.ceil(totalRecords / pageSize)" />
+    </div>
+
     <!-- 编辑会员抽屉 -->
     <NDrawer v-model:show="editVisible" :width="720" placement="right">
       <NDrawerContent closable>

@@ -184,6 +184,9 @@ export function updateSpinRecord(id: number, data: Record<string, any>) {
 export function fetchProjectCategories(params?: Record<string, any>) {
   return request({ url: '/project-categories', params });
 }
+export function fetchProjectCategoryDetail(id: number) {
+  return request({ url: `/project-categories/${id}` });
+}
 export function createProjectCategory(data: Record<string, any>) {
   return request({ url: '/project-categories', method: 'post', data });
 }
@@ -200,6 +203,9 @@ export function toggleProjectCategoryStatus(id: number) {
 // ==================== 担保机构 ====================
 export function fetchGuarantors(params?: Record<string, any>) {
   return request({ url: '/guarantors', params });
+}
+export function fetchGuarantorDetail(id: number) {
+  return request({ url: `/guarantors/${id}` });
 }
 export function createGuarantor(data: Record<string, any>) {
   return request({ url: '/guarantors', method: 'post', data });
@@ -255,6 +261,9 @@ export function rebateOrder(id: number) {
 export function fetchMallCategories(params?: Record<string, any>) {
   return request({ url: '/mall-categories', params });
 }
+export function fetchMallCategoryDetail(id: number) {
+  return request({ url: `/mall-categories/${id}` });
+}
 export function createMallCategory(data: Record<string, any>) {
   return request({ url: '/mall-categories', method: 'post', data });
 }
@@ -272,6 +281,9 @@ export function sortMallCategories(items: { id: number; sort: number }[]) {
 export function fetchMallGoods(params: Record<string, any>) {
   return request({ url: '/mall-goods', params });
 }
+export function fetchMallGoodsDetail(id: number) {
+  return request({ url: `/mall-goods/${id}` });
+}
 export function createMallGoods(data: Record<string, any>) {
   return request({ url: '/mall-goods', method: 'post', data });
 }
@@ -285,6 +297,9 @@ export function deleteMallGoods(id: number) {
 // ==================== 发货管理 ====================
 export function fetchShippingOrders(params: Record<string, any>) {
   return request({ url: '/shipping', params });
+}
+export function fetchShippingDetail(id: number) {
+  return request({ url: `/shipping/${id}/detail` });
 }
 export function updateShippingLogistics(id: number, data: Record<string, any>) {
   return request({ url: `/shipping/${id}/logistics`, method: 'put', data });
@@ -314,6 +329,9 @@ export function sendMessage(id: number) {
 export function fetchPopups(params?: Record<string, any>) {
   return request({ url: '/popups', params });
 }
+export function fetchPopupDetail(id: number) {
+  return request({ url: `/popups/${id}` });
+}
 export function createPopup(data: Record<string, any>) {
   return request({ url: '/popups', method: 'post', data });
 }
@@ -327,6 +345,9 @@ export function deletePopup(id: number) {
 // ==================== 轮播消息 ====================
 export function fetchMarquees(params?: Record<string, any>) {
   return request({ url: '/marquees', params });
+}
+export function fetchMarqueeDetail(id: number) {
+  return request({ url: `/marquees/${id}` });
 }
 export function createMarquee(data: Record<string, any>) {
   return request({ url: '/marquees', method: 'post', data });
@@ -466,6 +487,9 @@ export function fetchAgentReport(params: Record<string, any>) {
 export function fetchBalanceProducts() {
   return request({ url: '/balance-products' });
 }
+export function fetchBalanceProductDetail(id: number) {
+  return request({ url: `/balance-products/${id}` });
+}
 export function createBalanceProduct(data: Record<string, any>) {
   return request({ url: '/balance-products', method: 'post', data });
 }
@@ -573,9 +597,27 @@ export function saveSettings(items: Record<string, any>[]) {
   return request({ url: '/settings', method: 'post', data: { items } });
 }
 
+// ==================== 多语言管理 ====================
+/** 语言项类型 */
+export interface LocaleItem {
+  id: number;
+  code: string;
+  label: string;
+  sort: number;
+  status: number;
+}
+
+/** 获取启用的语言列表（供 Language Tab 使用） */
+export function fetchActiveLocales() {
+  return request<LocaleItem[]>({ url: '/locales/active' });
+}
+
 // ==================== 轮播图管理 ====================
 export function fetchBanners() {
   return request({ url: '/banners' });
+}
+export function fetchBannerDetail(id: number) {
+  return request({ url: `/banners/${id}` });
 }
 export function createBanner(data: Record<string, any>) {
   return request({ url: '/banners', method: 'post', data });

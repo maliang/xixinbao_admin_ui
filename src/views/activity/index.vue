@@ -1,9 +1,21 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { NButton, NInput, NSelect, NModal, NForm, NFormItem, NDatePicker, NPagination, useDialog } from 'naive-ui';
+import { NButton, NInput, NSelect, NModal, NForm, NFormItem, NDatePicker, NPagination, NTag, NTabs, NTabPane, useDialog } from 'naive-ui';
 import ImageUpload from '@/components/common/ImageUpload.vue';
 import { fetchActivities, fetchActivity, createActivity, updateActivity, deleteActivity, toggleActivity, fetchActivityTypes, createActivityType, updateActivityType, deleteActivityType } from '@/service/api';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 defineOptions({ name: 'ActivityPage' });
+
+// 多语言编辑器
+const {
+  currentLang,
+  locales,
+  formFields: langFields,
+  switchLang,
+  initEditor,
+  buildPayload,
+  loadLocales
+} = useLanguageEditor({ fields: ['title', 'content'] });
 const dialog = useDialog();
 const keyword = ref('');
 const statusFilter = ref('all');
@@ -48,20 +60,39 @@ watch(currentPage, loadData);
 const editVisible = ref(false);
 const editTitle = ref('新建活动');
 const editForm = ref({ id: null as number|null, title: '', cover: '', startDate: null as number|null, endDate: null as number|null, typeId: null as string|null, content: '' });
-function openCreate() { editTitle.value='新建活动'; editForm.value={id:null,title:'',cover:'',startDate:null,endDate:null,typeId:null,content:''}; editVisible.value=true; }
-function openEdit(item: any) { editTitle.value='编辑活动信息'; editForm.value={id:item.id,title:item.title,cover:item.cover||'',startDate:item.startDate?new Date(item.startDate).getTime():null,endDate:item.endDate?new Date(item.endDate).getTime():null,typeId:item.typeId?String(item.typeId):null,content:item.content||''}; editVisible.value=true; }
+function openCreate() { editTitle.value='新建活动'; editForm.value={id:null,title:'',cover:'',startDate:null,endDate:null,typeId:null,content:''}; initEditor({ title: '', content: '' }, {}); editVisible.value=true; }
+async function openEdit(item: any) {
+  editTitle.value='编辑活动信息';
+  editForm.value={id:item.id,title:item.title,cover:item.cover||'',startDate:item.startDate?new Date(item.startDate).getTime():null,endDate:item.endDate?new Date(item.endDate).getTime():null,typeId:item.typeId?String(item.typeId):null,content:item.content||''};
+  // 获取详情（含 translations）
+  const { data, error } = await fetchActivity(item.id);
+  if (!error && data) {
+    const detail = data as any;
+    editForm.value.content = detail.content || item.content || '';
+    initEditor(
+      { title: detail.title || item.title || '', content: detail.content || item.content || '' },
+      detail.translations || {}
+    );
+  } else {
+    initEditor({ title: item.title || '', content: item.content || '' }, {});
+  }
+  editVisible.value=true;
+}
 async function handleSave() {
-  if (!editForm.value.title) { window.$message?.warning('请输入活动标题'); return; }
+  if (!langFields.value.title) { window.$message?.warning('请输入活动标题'); return; }
   if (editForm.value.startDate && editForm.value.endDate && editForm.value.endDate < editForm.value.startDate) {
     window.$message?.warning('结束时间必须大于开始时间'); return;
   }
-  const payload = {
-    title: editForm.value.title,
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+  const payload: Record<string, any> = {
+    title: zhFields.title || '',
     cover: editForm.value.cover,
     startDate: editForm.value.startDate ? toLocalDateStr(editForm.value.startDate) : undefined,
     endDate: editForm.value.endDate ? toLocalDateStr(editForm.value.endDate) : undefined,
     typeId: editForm.value.typeId,
-    content: editForm.value.content
+    content: zhFields.content || '',
+    translations: translationsJson
   };
   const { error } = editForm.value.id
     ? await updateActivity(editForm.value.id, payload)
@@ -114,7 +145,7 @@ async function openDetail(item: any) {
   }
 }
 
-onMounted(() => { loadTypes(); loadData(); });
+onMounted(() => { loadTypes(); loadData(); loadLocales(); });
 </script>
 
 <template>
@@ -179,6 +210,9 @@ onMounted(() => { loadTypes(); loadData(); });
             <SvgIcon icon="ph:calendar-blank" class="text-14px" />
             <span>{{ item.startDate }} 至 {{ item.endDate }}</span>
           </div>
+          <div v-if="item.locales && item.locales.length" class="flex items-center gap-4px flex-wrap mb-10px">
+            <NTag v-for="code in item.locales" :key="code" size="tiny" :bordered="false">{{ code }}</NTag>
+          </div>
           <div class="flex items-center justify-between">
             <a class="flex items-center gap-4px text-12px text-primary cursor-pointer" @click="openDetail(item)">
               <SvgIcon icon="ph:eye" class="text-14px" />
@@ -212,6 +246,11 @@ onMounted(() => { loadTypes(); loadData(); });
 
     <!-- 新建/编辑弹窗 -->
     <NModal v-model:show="editVisible" preset="card" :title="editTitle" style="width: 600px;" :bordered="false">
+      <!-- 多语言 Tab 栏 -->
+      <NTabs :value="currentLang" type="line" size="small" class="mb-16px" @update:value="switchLang">
+        <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+      </NTabs>
+
       <div class="flex gap-20px">
         <div class="flex-shrink-0">
           <ImageUpload v-model="editForm.cover" width="160px" height="200px" />
@@ -220,7 +259,7 @@ onMounted(() => { loadTypes(); loadData(); });
         <div class="flex-1">
           <NForm label-placement="top" size="small">
             <NFormItem label="活动标题">
-              <NInput v-model:value="editForm.title" placeholder="输入活动标题" />
+              <NInput v-model:value="langFields.title" placeholder="输入活动标题" />
             </NFormItem>
             <NFormItem label="活动时间">
               <div class="flex items-center gap-8px w-full">
@@ -240,7 +279,7 @@ onMounted(() => { loadTypes(); loadData(); });
         </div>
       </div>
       <NFormItem label="活动内容" class="mt-12px">
-        <NInput v-model:value="editForm.content" type="textarea" :rows="8" placeholder="请输入活动内容..." />
+        <NInput v-model:value="langFields.content" type="textarea" :rows="8" placeholder="请输入活动内容..." />
       </NFormItem>
       <template #footer>
         <div class="flex justify-end gap-12px">

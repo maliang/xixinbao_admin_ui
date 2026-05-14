@@ -2,17 +2,29 @@
 import { ref, h, computed, onMounted, watch } from 'vue';
 import {
   NCard, NButton, NInput, NSelect, NPagination, NModal, NSpace,
-  NSwitch, NRadio, NRadioGroup, NDatePicker, NDataTable, NTag, useDialog
+  NSwitch, NRadio, NRadioGroup, NDatePicker, NDataTable, NTag, NTabs, NTabPane, useDialog
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
-import { fetchNewsList, createNews, updateNews, deleteNews, fetchNewsCategories, createNewsCategory, updateNewsCategory, deleteNewsCategory } from '@/service/api';
+import { fetchNewsList, fetchNewsDetail, createNews, updateNews, deleteNews, fetchNewsCategories, createNewsCategory, updateNewsCategory, deleteNewsCategory } from '@/service/api';
 import ImageUpload from '@/components/common/ImageUpload.vue';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import { useAuthStore } from '@/store/modules/auth';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'ContentNewsPage' });
 const dialog = useDialog();
 const authStore = useAuthStore();
+
+// 多语言编辑器
+const {
+  currentLang,
+  locales,
+  formFields,
+  switchLang,
+  initEditor,
+  buildPayload,
+  loadLocales
+} = useLanguageEditor({ fields: ['title', 'content'] });
 
 const searchKeyword = ref('');
 const statusFilter = ref('' as string);
@@ -88,6 +100,13 @@ const newsColumns = computed<DataTableColumns>(() => [
       return h(NTag, { type: s.type, size: 'small', bordered: false }, () => s.label);
     }
   },
+  {
+    title: '语言', key: 'locales', width: 120,
+    render: (row) => {
+      const locales = (row as any).locales || ['zh-CN'];
+      return h(NSpace, { size: 4 }, () => locales.map((code: string) => h(NTag, { size: 'tiny', bordered: false }, () => code)));
+    }
+  },
   { title: '发布时间', key: 'publishedAt', width: 150, render: (row) => (row as any).publishedAt || (row as any).createdAt || '--' },
   {
     title: '操作', key: 'action', width: 100, align: 'center',
@@ -134,10 +153,12 @@ const publishForm = ref({
 function openPublish() {
   editingNewsId.value = null;
   publishForm.value = { title: '', categoryId: null, coverImage: '', contentType: 'original', content: '', externalTitle: '', externalUrl: '', summary: '', isTop: false, status: 'published', publishedAt: null };
+  // 初始化多语言编辑器（新建时主字段为空，无翻译数据）
+  initEditor({ title: '', content: '' }, {});
   publishVisible.value = true;
 }
 
-function openEdit(r: NewsRecord) {
+async function openEdit(r: NewsRecord) {
   editingNewsId.value = r.id;
   const row = r as any;
   publishForm.value = {
@@ -153,6 +174,20 @@ function openEdit(r: NewsRecord) {
     status: r.status,
     publishedAt: r.publishedAt ? new Date(r.publishedAt).getTime() : null
   };
+  // 获取详情（含 translations）
+  const { data, error } = await fetchNewsDetail(r.id);
+  if (!error && data) {
+    const detail = data as any;
+    publishForm.value.content = detail.content || r.content || '';
+    // 初始化多语言编辑器
+    initEditor(
+      { title: detail.title || r.title || '', content: detail.content || r.content || '' },
+      detail.translations || {}
+    );
+  } else {
+    // 接口失败时用列表数据初始化
+    initEditor({ title: r.title || '', content: r.content || '' }, {});
+  }
   publishVisible.value = true;
 }
 
@@ -191,7 +226,16 @@ function handleDelete(r: NewsRecord) {
 }
 
 async function handleSaveNews() {
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+
   const payload: Record<string, any> = { ...publishForm.value };
+  // 用多语言编辑器中的 zh-CN 字段覆盖主字段
+  payload.title = zhFields.title || '';
+  payload.content = zhFields.content || '';
+  // 将 translations 序列化为 JSON 字符串后提交（避免 axios 拦截器转换 key）
+  payload.translations = translationsJson;
+
   // 转换日期时间戳为字符串
   if (payload.publishedAt && typeof payload.publishedAt === 'number') {
     payload.publishedAt = new Date(payload.publishedAt).toISOString().slice(0, 19).replace('T', ' ');
@@ -216,7 +260,7 @@ async function loadData() {
 }
 
 watch(currentPage, loadData);
-onMounted(() => { loadCategories(); loadData(); });
+onMounted(() => { loadCategories(); loadData(); loadLocales(); });
 </script>
 
 <template>
@@ -250,7 +294,12 @@ onMounted(() => { loadCategories(); loadData(); });
     <!-- 发布新闻弹窗 -->
     <NModal v-model:show="publishVisible" preset="card" title="发布新闻" style="width: 600px;" :bordered="false">
       <div class="flex flex-col gap-18px">
-        <div><div class="text-13px font-500 mb-6px">新闻标题</div><NInput v-model:value="publishForm.title" placeholder="请输入新闻标题" /></div>
+        <!-- 多语言 Tab 栏 -->
+        <NTabs :value="currentLang" type="line" size="small" @update:value="switchLang">
+          <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+        </NTabs>
+
+        <div><div class="text-13px font-500 mb-6px">新闻标题</div><NInput v-model:value="formFields.title" placeholder="请输入新闻标题" /></div>
         <div><div class="text-13px font-500 mb-6px">所属分类</div><NSelect v-model:value="publishForm.categoryId" :options="categories.map(c => ({ label: c.name, value: c.id }))" placeholder="请选择分类" /></div>
         <div>
           <div class="text-13px font-500 mb-6px">封面图片</div>
@@ -260,7 +309,7 @@ onMounted(() => { loadCategories(); loadData(); });
         <div><div class="text-13px font-500 mb-8px">内容类型</div><NRadioGroup v-model:value="publishForm.contentType"><NRadio value="original">原创内容</NRadio><NRadio value="external" class="ml-16px">引用外链</NRadio></NRadioGroup></div>
         <div v-if="publishForm.contentType === 'original'">
           <div class="text-13px font-500 mb-6px">新闻内容</div>
-          <RichTextEditor v-model="publishForm.content" placeholder="请输入新闻内容..." height="300px" />
+          <RichTextEditor v-model="formFields.content" placeholder="请输入新闻内容..." height="300px" />
         </div>
         <template v-if="publishForm.contentType === 'external'">
           <div><div class="text-13px font-500 mb-6px">外链标题</div><NInput v-model:value="publishForm.externalTitle" placeholder="输入外链新闻标题" /></div>

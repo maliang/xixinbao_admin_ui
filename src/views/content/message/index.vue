@@ -3,17 +3,24 @@ import { ref, h, computed, onMounted, watch } from 'vue';
 import {
   NCard, NButton, NInput, NSelect, NDatePicker, NPagination,
   NCollapse, NCollapseItem, NGrid, NGridItem, NModal, NSpace,
-  NRadio, NRadioGroup, NTag, NDynamicTags, NDataTable, useDialog
+  NRadio, NRadioGroup, NTag, NDynamicTags, NDataTable, NTabs, NTabPane, useDialog
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { fetchMessages, createMessage, updateMessage, deleteMessage, sendMessage } from '@/service/api';
 import ImageUpload from '@/components/common/ImageUpload.vue';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import { useAuthStore } from '@/store/modules/auth';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'ContentMessagePage' });
 const dialog = useDialog();
 const authStore = useAuthStore();
+
+// 多语言编辑器（可翻译字段：title, content）
+const {
+  currentLang, locales, formFields: langFields,
+  loadLocales, switchLang, initEditor, buildPayload, saveCurrentContent
+} = useLanguageEditor({ fields: ['title', 'content'] });
 
 const searchForm = ref({
   keyword: '', type: '' as string, status: '' as string,
@@ -83,6 +90,13 @@ const columns = computed<DataTableColumns>(() => [
       return h(NTag, { type: s.type, size: 'small', bordered: false }, () => s.label);
     }
   },
+  {
+    title: '语言', key: 'locales', width: 120,
+    render: (row) => {
+      const locales = (row as any).locales || ['zh-CN'];
+      return h(NSpace, { size: 4 }, () => locales.map((code: string) => h(NTag, { size: 'tiny', bordered: false }, () => code)));
+    }
+  },
   { title: '创建时间', key: 'createdAt', width: 130 },
   { title: '推送时间', key: 'sendAt', width: 130 },
   {
@@ -103,11 +117,12 @@ const editForm = ref({
 
 function openCreate() {
   editForm.value = { id: null, targetType: 'all', targetMembers: [], title: '', messageType: 'system', content: '', image: '', publishType: 'now', scheduleTime: null };
+  initEditor({ title: '', content: '' }, {});
   editVisible.value = true;
 }
 
 async function openEdit(r: MessageRecord) {
-  // 先获取消息详情（含目标用户账号）
+  // 先获取消息详情（含目标用户账号和 translations）
   const { fetchMessageDetail } = await import('@/service/api');
   const { data, error } = await fetchMessageDetail(r.id);
   const detail = !error && data ? data : r;
@@ -123,6 +138,14 @@ async function openEdit(r: MessageRecord) {
     publishType: 'now',
     scheduleTime: null
   };
+
+  // 初始化多语言编辑器
+  const translations = detail.translations || {};
+  initEditor(
+    { title: editForm.value.title, content: editForm.value.content },
+    translations
+  );
+
   editVisible.value = true;
 }
 
@@ -140,16 +163,29 @@ function handleDelete(r: MessageRecord) {
 
 async function handleSave(action: 'draft' | 'send') {
   const editingId = editForm.value.id;
-  // 构建 payload，将 messageType 映射为 type
-  function buildPayload() {
+  // 构建 payload，将 messageType 映射为 type，并包含多语言数据
+  function buildFormPayload() {
+    // 获取多语言 payload
+    const { zhFields, translationsJson } = buildPayload();
+
     const { messageType, publishType, scheduleTime, ...rest } = editForm.value;
-    const payload: Record<string, any> = { ...rest, type: messageType, publishType, scheduleTime };
+    const payload: Record<string, any> = {
+      ...rest,
+      type: messageType,
+      publishType,
+      scheduleTime,
+      // 使用多语言编辑器中的 zh-CN 字段值
+      title: zhFields.title,
+      content: zhFields.content,
+      // translations 序列化为 JSON 字符串提交
+      translations: translationsJson
+    };
     return payload;
   }
 
   if (editingId) {
     // 编辑模式：先更新内容
-    const payload = buildPayload();
+    const payload = buildFormPayload();
     delete payload.id;
     if (action === 'draft') payload.status = 'draft';
     const { error } = await updateMessage(editingId, payload);
@@ -160,7 +196,7 @@ async function handleSave(action: 'draft' | 'send') {
     } else { window.$message?.error(error?.msg || '操作失败'); }
   } else {
     // 新增模式
-    const payload = buildPayload();
+    const payload = buildFormPayload();
     delete payload.id;
     if (action === 'send') {
       if (editForm.value.publishType === 'schedule' && editForm.value.scheduleTime) {
@@ -205,7 +241,7 @@ async function loadData() {
 }
 
 watch(currentPage, loadData);
-onMounted(() => { loadData(); });
+onMounted(() => { loadLocales(); loadData(); });
 </script>
 
 <template>
@@ -265,7 +301,13 @@ onMounted(() => { loadData(); });
           </div>
           <div v-if="editForm.targetType === 'all'" class="hint-box mt-8px">消息将发送给平台所有注册会员</div>
         </div>
-        <div><div class="text-13px font-500 mb-6px">标题</div><NInput v-model:value="editForm.title" placeholder="输入消息标题" /></div>
+
+        <!-- 多语言 Tab -->
+        <NTabs v-model:value="currentLang" type="segment" size="small" @update:value="switchLang">
+          <NTabPane v-for="loc in locales" :key="loc.code" :name="loc.code" :tab="loc.label" />
+        </NTabs>
+
+        <div><div class="text-13px font-500 mb-6px">标题</div><NInput v-model:value="langFields.title" placeholder="输入消息标题" /></div>
         <div><div class="text-13px font-500 mb-6px">消息类型</div><NSelect v-model:value="editForm.messageType" :options="[{label:'系统通知',value:'system'},{label:'活动促销',value:'promo'},{label:'安全预警',value:'security'},{label:'其他',value:'other'}]" /></div>
         <div>
           <div class="text-13px font-500 mb-6px">消息配图</div>
@@ -274,7 +316,7 @@ onMounted(() => { loadData(); });
         </div>
         <div>
           <div class="text-13px font-500 mb-6px">内容</div>
-          <RichTextEditor v-model="editForm.content" placeholder="请输入消息内容..." height="240px" />
+          <RichTextEditor v-model="langFields.content" placeholder="请输入消息内容..." height="240px" />
         </div>
         <div>
           <div class="text-13px font-500 mb-8px">发布设置</div>

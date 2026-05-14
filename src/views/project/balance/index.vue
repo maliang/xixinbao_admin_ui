@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { ref, h, onMounted } from 'vue';
-import { NCard, NButton, NModal, NForm, NFormItem, NInput, NInputNumber, NCheckbox, NDataTable, NTag, NSpace, useDialog } from 'naive-ui';
-import { fetchBalanceProducts, createBalanceProduct, updateBalanceProduct, toggleBalanceProduct, deleteBalanceProduct } from '@/service/api';
+import { NCard, NButton, NModal, NForm, NFormItem, NInput, NInputNumber, NCheckbox, NDataTable, NTag, NSpace, NTabs, NTabPane, useDialog } from 'naive-ui';
+import { fetchBalanceProducts, fetchBalanceProductDetail, createBalanceProduct, updateBalanceProduct, toggleBalanceProduct, deleteBalanceProduct } from '@/service/api';
 import { useAuthStore } from '@/store/modules/auth';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 defineOptions({ name: 'ProjectBalancePage' });
 const dialog = useDialog();
 const authStore = useAuthStore();
+
+// 多语言编辑器（可翻译字段：name）
+const {
+  currentLang, locales, formFields: langFields, switchLang, initEditor, buildPayload, loadLocales
+} = useLanguageEditor({ fields: ['name'] });
 
 // ========== 列表 ==========
 const data = ref<any[]>([]);
@@ -34,6 +40,13 @@ const columns = [
     ]);
   }},
   { title: '状态', key: 'status', width: 90, align: 'center' as const, render: (row: any) => h(NTag, { type: row.status === 'on' ? 'success' : 'error', size: 'small', bordered: false }, () => row.status === 'on' ? '上架中' : '已下架') },
+  {
+    title: '语言', key: 'locales', width: 120,
+    render: (row: any) => {
+      const locales = row.locales || ['zh-CN'];
+      return h(NSpace, { size: 4 }, () => locales.map((code: string) => h(NTag, { size: 'tiny', bordered: false }, () => code)));
+    }
+  },
   { title: '操作', key: 'action', width: 180, render: (row: any) => h(NSpace, { size: 4 }, () => [
     authStore.hasPermission('project.balance.edit') ? h(NButton, { size: 'tiny', quaternary: true, onClick: () => openEdit(row) }, () => '编辑') : null,
     authStore.hasPermission('project.balance.delete') ? h(NButton, { size: 'tiny', quaternary: true, type: 'error', onClick: () => confirmDelete(row) }, () => '删除') : null,
@@ -46,7 +59,6 @@ const modalVisible = ref(false);
 const modalTitle = ref('新建项目');
 const formData = ref({
   id: null as number | null,
-  name: '',
   rate: null as number | null,
   period: null as number | null,
   settle_type: 'daily' as 'daily' | 'maturity',
@@ -56,28 +68,44 @@ const formData = ref({
 
 function openCreate() {
   modalTitle.value = '新建项目';
-  formData.value = { id: null, name: '', rate: null, period: null, settle_type: 'daily', early_redeem_rate: null, early_redeem_principal_only: false };
+  formData.value = { id: null, rate: null, period: null, settle_type: 'daily', early_redeem_rate: null, early_redeem_principal_only: false };
+  initEditor({ name: '' }, {});
   modalVisible.value = true;
 }
-function openEdit(row: any) {
+async function openEdit(row: any) {
   modalTitle.value = '编辑项目';
   formData.value = {
-    id: row.id, name: row.name, rate: row.rate, period: row.period,
+    id: row.id,
+    rate: row.rate, period: row.period,
     settle_type: row.settleType || 'daily',
     early_redeem_rate: row.earlyRedeemRate ?? null,
     early_redeem_principal_only: row.earlyRedeemPrincipalOnly || false
   };
+
+  // 从详情接口获取完整 translations 数据
+  const { data: detail, error } = await fetchBalanceProductDetail(row.id);
+  if (!error && detail) {
+    const translations = detail.translations || {};
+    initEditor({ name: detail.name || '' }, translations);
+  } else {
+    initEditor({ name: row.name || '' }, {});
+  }
   modalVisible.value = true;
 }
 async function handleSave() {
-  if (!formData.value.name) { window.$message?.warning('请输入项目名称'); return; }
-  const payload = {
-    name: formData.value.name,
+  if (!langFields.value.name && currentLang.value === 'zh-CN') { window.$message?.warning('请输入项目名称'); return; }
+
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+
+  const payload: Record<string, any> = {
+    name: zhFields.name,
     rate: formData.value.rate,
     period: formData.value.period,
     settle_type: formData.value.settle_type,
     early_redeem_rate: formData.value.early_redeem_rate,
-    early_redeem_principal_only: formData.value.early_redeem_principal_only
+    early_redeem_principal_only: formData.value.early_redeem_principal_only,
+    translations: translationsJson
   };
   const { error } = formData.value.id
     ? await updateBalanceProduct(formData.value.id, payload)
@@ -111,7 +139,7 @@ function confirmDelete(row: any) {
   });
 }
 
-onMounted(() => { loadData(); });
+onMounted(() => { loadLocales(); loadData(); });
 </script>
 
 <template>
@@ -138,39 +166,48 @@ onMounted(() => { loadData(); });
     <!-- 新建/编辑弹窗 -->
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 520px;" :bordered="false">
       <NForm label-placement="top" size="small">
+        <!-- Language Tab -->
+        <NTabs v-if="locales.length > 1" :value="currentLang" type="segment" size="small" @update:value="switchLang" class="mb-16px">
+          <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+        </NTabs>
+
         <NFormItem label="项目名称">
-          <NInput v-model:value="formData.name" placeholder="例：天天增益宝" />
+          <NInput v-model:value="langFields.name" placeholder="例：天天增益宝" />
         </NFormItem>
-        <div class="flex gap-12px">
-          <NFormItem label="年化利率" class="flex-1">
-            <NInput v-model:value="formData.rate" placeholder="2.85">
-              <template #suffix>%</template>
-            </NInput>
-          </NFormItem>
-          <NFormItem label="期限 (天)" class="flex-1">
-            <NInputNumber v-model:value="formData.period" placeholder="30" :show-button="false" class="w-full" />
-          </NFormItem>
-        </div>
-        <NFormItem label="收益结算规则">
-          <div class="settle-switch">
-            <div class="settle-option" :class="{ active: formData.settle_type === 'daily' }" @click="formData.settle_type = 'daily'">按日返息</div>
-            <div class="settle-option" :class="{ active: formData.settle_type === 'maturity' }" @click="formData.settle_type = 'maturity'">到期返本息</div>
+
+        <!-- 以下字段仅在 zh-CN 时显示（非翻译字段） -->
+        <template v-if="currentLang === 'zh-CN'">
+          <div class="flex gap-12px">
+            <NFormItem label="年化利率" class="flex-1">
+              <NInput v-model:value="formData.rate" placeholder="2.85">
+                <template #suffix>%</template>
+              </NInput>
+            </NFormItem>
+            <NFormItem label="期限 (天)" class="flex-1">
+              <NInputNumber v-model:value="formData.period" placeholder="30" :show-button="false" class="w-full" />
+            </NFormItem>
           </div>
-        </NFormItem>
-        <!-- 按日返息说明 -->
-        <div v-if="formData.settle_type === 'daily'" class="settle-desc">
-          每日收益 = 剩余本金 × 日利率，自动发放。提前转出仅退本金。
-        </div>
-        <!-- 到期返本息：提前赎回配置 -->
-        <template v-if="formData.settle_type === 'maturity'">
-          <NFormItem label="提前赎回利率">
-            <NInput v-model:value="formData.early_redeem_rate" placeholder="0.50">
-              <template #suffix>%</template>
-            </NInput>
+          <NFormItem label="收益结算规则">
+            <div class="settle-switch">
+              <div class="settle-option" :class="{ active: formData.settle_type === 'daily' }" @click="formData.settle_type = 'daily'">按日返息</div>
+              <div class="settle-option" :class="{ active: formData.settle_type === 'maturity' }" @click="formData.settle_type = 'maturity'">到期返本息</div>
+            </div>
           </NFormItem>
-          <NCheckbox v-model:checked="formData.early_redeem_principal_only">
-            仅退本金（提前赎回收益为0）
-          </NCheckbox>
+          <!-- 按日返息说明 -->
+          <div v-if="formData.settle_type === 'daily'" class="settle-desc">
+            每日收益 = 剩余本金 × 日利率，自动发放。提前转出仅退本金。
+          </div>
+          <!-- 到期返本息：提前赎回配置 -->
+          <template v-if="formData.settle_type === 'maturity'">
+            <NFormItem label="提前赎回利率">
+              <NInput v-model:value="formData.early_redeem_rate" placeholder="0.50">
+                <template #suffix>%</template>
+              </NInput>
+            </NFormItem>
+            <NCheckbox v-model:checked="formData.early_redeem_principal_only">
+              仅退本金（提前赎回收益为0）
+            </NCheckbox>
+          </template>
         </template>
       </NForm>
       <template #footer>

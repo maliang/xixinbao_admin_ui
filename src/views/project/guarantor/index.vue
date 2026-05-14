@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { ref, h, resolveComponent, onMounted, watch, computed } from 'vue';
 import {
-  NCard, NDataTable, NButton, NSpace, NInputNumber, NPagination,
-  NModal, NForm, NFormItem, NInput, NImage, useDialog
+  NCard, NDataTable, NButton, NSpace, NTag, NInputNumber, NPagination,
+  NModal, NForm, NFormItem, NInput, NImage, NTabs, NTabPane, useDialog
 } from 'naive-ui';
-import { fetchGuarantors, createGuarantor, updateGuarantor, deleteGuarantor } from '@/service/api';
+import { fetchGuarantors, fetchGuarantorDetail, createGuarantor, updateGuarantor, deleteGuarantor } from '@/service/api';
 import ImageUpload from '@/components/common/ImageUpload.vue';
 import { useAuthStore } from '@/store/modules/auth';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'ProjectGuarantorPage' });
 
 const dialog = useDialog();
 const authStore = useAuthStore();
+
+// 多语言编辑器（可翻译字段：name）
+const {
+  currentLang, locales, formFields: langFields, switchLang, initEditor, buildPayload, loadLocales
+} = useLanguageEditor({ fields: ['name'] });
 
 // ========== 加载状态 ==========
 const loading = ref(false);
@@ -57,6 +63,13 @@ const columns = [
     })
   },
   {
+    title: '语言', key: 'locales', width: 120,
+    render: (row: any) => {
+      const locales = row.locales || ['zh-CN'];
+      return h(NSpace, { size: 4 }, () => locales.map((code: string) => h(NTag, { size: 'tiny', bordered: false }, () => code)));
+    }
+  },
+  {
     title: '操作', key: 'action', width: 140, align: 'center' as const,
     render: (row: any) => h(NSpace, { size: 8, justify: 'center' }, () => [
       authStore.hasPermission('project.guarantor.edit') ? h(NButton, { text: true, type: 'primary', onClick: () => openModal(row) }, () => '编辑') : null,
@@ -81,7 +94,6 @@ const modalVisible = ref(false);
 const modalTitle = ref('新增担保机构');
 const formData = ref({
   id: null as number | null,
-  name: '',
   logo: '' as string,
   sort: 10
 });
@@ -89,16 +101,33 @@ const formData = ref({
 function openModal(row?: any) {
   if (row) {
     modalTitle.value = '编辑担保机构';
-    formData.value = { id: row.id, name: row.name, logo: row.logo || '', sort: row.sort };
+    formData.value = { id: row.id, logo: row.logo || '', sort: row.sort };
+    // 从详情接口获取完整 translations 数据
+    fetchGuarantorDetail(row.id).then(({ data: detail, error }) => {
+      if (!error && detail) {
+        const translations = detail.translations || {};
+        initEditor({ name: detail.name || '' }, translations);
+      } else {
+        initEditor({ name: row.name || '' }, {});
+      }
+    });
   } else {
     modalTitle.value = '新增担保机构';
-    formData.value = { id: null, name: '', logo: '', sort: 10 };
+    formData.value = { id: null, logo: '', sort: 10 };
+    initEditor({ name: '' }, {});
   }
   modalVisible.value = true;
 }
 
 async function handleSave() {
-  const payload: Record<string, any> = { name: formData.value.name, sort: formData.value.sort };
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+
+  const payload: Record<string, any> = {
+    name: zhFields.name,
+    sort: formData.value.sort,
+    translations: translationsJson
+  };
   if (formData.value.logo) {
     payload.logo = formData.value.logo;
   }
@@ -160,7 +189,7 @@ async function loadData() {
 }
 
 watch(currentPage, loadData);
-onMounted(() => { loadData(); });
+onMounted(() => { loadLocales(); loadData(); });
 </script>
 
 <template>
@@ -187,17 +216,28 @@ onMounted(() => { loadData(); });
 
     <!-- 新增/编辑弹窗 -->
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 480px;" :bordered="false">
-      <NForm label-placement="top" size="small">
-        <NFormItem label="名称">
-          <NInput v-model:value="formData.name" placeholder="请输入担保机构名称" />
-        </NFormItem>
-        <NFormItem label="公章图">
-          <ImageUpload v-model="formData.logo" width="120px" height="120px" />
-        </NFormItem>
-        <NFormItem label="排序">
-          <NInputNumber v-model:value="formData.sort" class="w-120px" />
-        </NFormItem>
-      </NForm>
+      <div class="flex flex-col gap-18px">
+        <!-- Language Tab -->
+        <NTabs v-if="locales.length > 1" :value="currentLang" type="segment" size="small" @update:value="switchLang">
+          <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+        </NTabs>
+
+        <NForm label-placement="top" size="small">
+          <NFormItem label="名称">
+            <NInput v-model:value="langFields.name" placeholder="请输入担保机构名称" />
+          </NFormItem>
+
+          <!-- 以下字段仅在 zh-CN 时显示（非翻译字段） -->
+          <template v-if="currentLang === 'zh-CN'">
+            <NFormItem label="公章图">
+              <ImageUpload v-model="formData.logo" width="120px" height="120px" />
+            </NFormItem>
+            <NFormItem label="排序">
+              <NInputNumber v-model:value="formData.sort" class="w-120px" />
+            </NFormItem>
+          </template>
+        </NForm>
+      </div>
       <template #footer>
         <NSpace justify="end">
           <NButton @click="modalVisible = false">取消</NButton>

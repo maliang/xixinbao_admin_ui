@@ -2,15 +2,28 @@
 import { ref, h, resolveComponent, computed, onMounted, watch } from 'vue';
 import {
   NCard, NDataTable, NButton, NSpace, NTag, NInput, NSelect, NImage,
-  NPagination, NModal, NForm, NFormItem, NInputNumber, NTreeSelect, useDialog
+  NPagination, NModal, NForm, NFormItem, NInputNumber, NTreeSelect,
+  NGrid, NGridItem, NTabs, NTabPane, useDialog
 } from 'naive-ui';
-import { fetchMallGoods, createMallGoods, updateMallGoods, deleteMallGoods, fetchMallCategories } from '@/service/api';
+import { fetchMallGoods, fetchMallGoodsDetail, createMallGoods, updateMallGoods, deleteMallGoods, fetchMallCategories } from '@/service/api';
 import ImageUpload from '@/components/common/ImageUpload.vue';
 import { useAuthStore } from '@/store/modules/auth';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'MallGoodsPage' });
 const dialog = useDialog();
 const authStore = useAuthStore();
+
+// 多语言编辑器
+const {
+  currentLang,
+  locales,
+  formFields: langFields,
+  switchLang,
+  initEditor,
+  buildPayload,
+  loadLocales
+} = useLanguageEditor({ fields: ['name', 'description'] });
 
 // ========== 筛选 ==========
 const keyword = ref('');
@@ -64,6 +77,13 @@ const columns = [
     title: '状态', key: 'status', width: 70, align: 'center' as const,
     render: (row: any) => h(NTag, { type: row.status === '上架中' ? 'success' : 'warning', size: 'small', bordered: false }, () => row.status)
   },
+  {
+    title: '语言', key: 'locales', width: 120,
+    render: (row: any) => {
+      const locales = row.locales || ['zh-CN'];
+      return h(NSpace, { size: 4 }, () => locales.map((code: string) => h(NTag, { size: 'tiny', bordered: false }, () => code)));
+    }
+  },
   { title: '添加时间', key: 'createdAt', width: 140 },
   {
     title: '操作', key: 'action', width: 80, align: 'center' as const,
@@ -85,13 +105,11 @@ const modalVisible = ref(false);
 const modalTitle = ref('新增商品');
 const formData = ref({
   id: null as number | null,
-  name: '',
   categoryId: null as string | null,
   points: null as number | null,
   price: null as number | null,
   stock: null as number | null,
   image: '' as string,
-  description: '',
   sort: 0,
   status: '上架中'
 });
@@ -101,25 +119,43 @@ function openModal(row?: any) {
     modalTitle.value = '编辑商品';
     formData.value = {
       id: row.id,
-      name: row.name,
       categoryId: row.categoryId ? String(row.categoryId) : null,
       points: row.points,
       price: parseFloat(String(row.price || 0).replace(/,/g, '')),
       stock: row.stock ?? 0,
       image: row.image || '',
-      description: row.description || '',
       sort: row.sort,
       status: row.status
     };
+    // 获取详情（含 translations）
+    fetchMallGoodsDetail(row.id).then(({ data, error }) => {
+      if (!error && data) {
+        const detail = data as any;
+        initEditor(
+          { name: detail.name || row.name || '', description: detail.description || row.description || '' },
+          detail.translations || {}
+        );
+      } else {
+        initEditor({ name: row.name || '', description: row.description || '' }, {});
+      }
+    });
   } else {
     modalTitle.value = '新增商品';
-    formData.value = { id: null, name: '', categoryId: null, points: null, price: null, stock: null, image: '', description: '', sort: 0, status: '上架中' };
+    formData.value = { id: null, categoryId: null, points: null, price: null, stock: null, image: '', sort: 0, status: '上架中' };
+    initEditor({ name: '', description: '' }, {});
   }
   modalVisible.value = true;
 }
 
 async function handleSaveGoods() {
-  const payload = { ...formData.value };
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+  const payload: Record<string, any> = { ...formData.value };
+  // 用多语言编辑器中的 zh-CN 值覆盖主字段
+  payload.name = zhFields.name || '';
+  payload.description = zhFields.description || '';
+  payload.translations = translationsJson;
+
   if (formData.value.id) {
     const { error } = await updateMallGoods(formData.value.id, payload);
     if (!error) {
@@ -183,6 +219,7 @@ watch(currentPage, loadData);
 onMounted(() => {
   loadCategories();
   loadData();
+  loadLocales();
 });
 
 async function loadCategories() {
@@ -261,11 +298,16 @@ async function loadCategories() {
 
     <!-- 新增/编辑弹窗 -->
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 600px;" :bordered="false">
+      <!-- 多语言 Tab 栏 -->
+      <NTabs :value="currentLang" type="line" size="small" class="mb-16px" @update:value="switchLang">
+        <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+      </NTabs>
+
       <NForm label-placement="top" size="small">
         <NGrid :x-gap="16" :cols="2">
           <NGridItem>
             <NFormItem label="商品名称">
-              <NInput v-model:value="formData.name" placeholder="请输入商品名称" />
+              <NInput v-model:value="langFields.name" placeholder="请输入商品名称" />
             </NFormItem>
           </NGridItem>
           <NGridItem>
@@ -291,7 +333,7 @@ async function loadCategories() {
         </NGrid>
 
         <NFormItem label="商品描述">
-          <NInput v-model:value="formData.description" type="textarea" :rows="4" placeholder="请输入商品描述" />
+          <NInput v-model:value="langFields.description" type="textarea" :rows="4" placeholder="请输入商品描述" />
         </NFormItem>
 
         <NFormItem label="商品图片">

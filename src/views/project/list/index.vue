@@ -3,14 +3,26 @@ import { ref, h, computed, onMounted, watch } from 'vue';
 import {
   NCard, NButton, NSpace, NTag, NInput, NSelect, NSwitch, NCollapse, NCollapseItem,
   NGrid, NGridItem, NPagination, NProgress, NDrawer, NDrawerContent, NForm, NFormItem,
-  NInputNumber, NRadioGroup, NRadio, NDatePicker, useDialog
+  NInputNumber, NRadioGroup, NRadio, NDatePicker, NTabs, NTabPane, useDialog
 } from 'naive-ui';
-import { fetchProjects, createProject, updateProject, deleteProject, toggleProject, fetchProjectCategories, fetchGuarantors, fetchLevels } from '@/service/api';
+import { fetchProjects, createProject, updateProject, deleteProject, toggleProject, fetchProjectCategories, fetchGuarantors, fetchLevels, fetchProject } from '@/service/api';
 import ImageUpload from '@/components/common/ImageUpload.vue';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'ProjectListPage' });
 
 const dialog = useDialog();
+
+// 多语言编辑器
+const {
+  currentLang,
+  locales,
+  formFields: langFields,
+  switchLang,
+  initEditor,
+  buildPayload,
+  loadLocales
+} = useLanguageEditor({ fields: ['name', 'description'] });
 
 // ========== 筛选 ==========
 const keyword = ref('');
@@ -212,17 +224,36 @@ function openDrawer(project?: any) {
       level2Rate: project.level2Rate,
       level3Rate: project.level3Rate
     };
+    // 获取详情（含 translations）
+    fetchProject(project.id).then(({ data, error }) => {
+      if (!error && data) {
+        const detail = data as any;
+        initEditor(
+          { name: detail.name || project.name || '', description: detail.description || project.description || '' },
+          detail.translations || {}
+        );
+      } else {
+        initEditor({ name: project.name || '', description: project.description || '' }, {});
+      }
+    });
   } else {
     isEdit.value = false;
     editId.value = null;
     formData.value = defaultFormData();
+    initEditor({ name: '', description: '' }, {});
   }
   drawerVisible.value = true;
 }
 
 // ========== 保存项目 ==========
 async function handleSaveProject() {
-  const payload = { ...formData.value };
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+  const payload: Record<string, any> = { ...formData.value };
+  // 用多语言编辑器中的 zh-CN 值覆盖主字段
+  payload.name = zhFields.name || '';
+  payload.description = zhFields.description || '';
+  payload.translations = translationsJson;
   let res;
   if (isEdit.value && editId.value) {
     res = await updateProject(editId.value, payload);
@@ -308,6 +339,7 @@ onMounted(() => {
   loadFilterOptions();
   loadLevelOptions();
   loadData();
+  loadLocales();
 });
 </script>
 
@@ -407,6 +439,9 @@ onMounted(() => {
             <NTag :type="getStatusType(p.status) as any" size="small" :bordered="false" class="mt-2px">
               {{ getStatusLabel(p.status) }}
             </NTag>
+            <div v-if="p.locales && p.locales.length" class="flex items-center gap-2px flex-wrap mt-4px justify-center">
+              <NTag v-for="code in p.locales" :key="code" size="tiny" :bordered="false">{{ code }}</NTag>
+            </div>
           </div>
 
           <!-- 期限 -->
@@ -457,6 +492,11 @@ onMounted(() => {
     <!-- 新增/编辑项目抽屉 -->
     <NDrawer v-model:show="drawerVisible" :width="680" placement="right">
       <NDrawerContent :title="isEdit ? '编辑项目' : '新增项目'" closable>
+        <!-- 多语言 Tab 栏 -->
+        <NTabs :value="currentLang" type="line" size="small" class="mb-16px" @update:value="switchLang">
+          <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+        </NTabs>
+
         <NForm label-placement="top" label-width="auto" size="small">
           <NGrid :x-gap="16" :y-gap="0" :cols="2">
             <NGridItem>
@@ -491,7 +531,7 @@ onMounted(() => {
             </NGridItem>
             <NGridItem>
               <NFormItem label="项目名称">
-                <NInput v-model:value="formData.name" placeholder="请输入项目名称" />
+                <NInput v-model:value="langFields.name" placeholder="请输入项目名称" />
               </NFormItem>
             </NGridItem>
             <NGridItem>
@@ -611,7 +651,7 @@ onMounted(() => {
             </NGridItem>
           </NGrid>
           <NFormItem label="产品说明">
-            <NInput v-model:value="formData.description" type="textarea" :rows="6" placeholder="请输入产品说明" />
+            <NInput v-model:value="langFields.description" type="textarea" :rows="6" placeholder="请输入产品说明" />
           </NFormItem>
         </NForm>
 

@@ -2,7 +2,11 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { NCard, NButton, NInput, NSelect, NPagination, NDataTable } from 'naive-ui';
 import { fetchAgentReportSummary, fetchAgentReport } from '@/service/api';
+import { useAuthStore } from '@/store/modules/auth';
 defineOptions({ name: 'AgentReportPage' });
+
+const authStore = useAuthStore();
+const isAgent = computed(() => authStore.userInfo.isAgent);
 
 // ========== 筛选 ==========
 const monthFilter = ref(getCurrentMonth());
@@ -39,7 +43,8 @@ const totalRecords = ref(0);
 const totalPages = computed(() => Math.ceil(totalRecords.value / pageSize) || 1);
 const reportData = ref<any[]>([]);
 
-const columns = [
+// 管理员视角的表格列
+const adminColumns = [
   { title: '数据月份', key: 'month', width: 120 },
   { title: '代理账号/姓名', key: 'account', width: 160, render: (row: any) => `${row.account || '-'}/${row.name || '-'}` },
   { title: '团队业绩', key: 'teamAmount', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.teamAmount || 0) },
@@ -47,6 +52,16 @@ const columns = [
   { title: '直接下线数', key: 'subCount', width: 100, align: 'right' as const },
   { title: '注册时间', key: 'createdAt', width: 140, render: (row: any) => row.agentCreatedAt || row.createdAt || '-' }
 ];
+
+// 代理视角的表格列
+const agentColumns = [
+  { title: '数据月份', key: 'month', width: 120 },
+  { title: '下线账号/姓名', key: 'account', width: 160, render: (row: any) => `${row.account || '-'}/${row.name || '-'}` },
+  { title: '下线业绩', key: 'teamAmount', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.teamAmount || 0) },
+  { title: '注册时间', key: 'createdAt', width: 140, render: (row: any) => row.agentCreatedAt || row.createdAt || '-' }
+];
+
+const columns = computed(() => isAgent.value ? agentColumns : adminColumns);
 
 async function loadData() {
   loading.value = true;
@@ -105,8 +120,8 @@ onMounted(() => { loadSummary(); loadData(); });
           <NSelect v-model:value="monthFilter" :options="monthOptions" size="small" />
         </div>
         <div class="flex-1 max-w-320px">
-          <div class="text-12px op-50 mb-4px">代理账号/姓名</div>
-          <NInput v-model:value="keyword" placeholder="请输入代理账号或姓名" clearable size="small">
+          <div class="text-12px op-50 mb-4px">{{ isAgent ? '下线账号/姓名' : '代理账号/姓名' }}</div>
+          <NInput v-model:value="keyword" :placeholder="isAgent ? '请输入下线账号或姓名' : '请输入代理账号或姓名'" clearable size="small">
             <template #suffix><SvgIcon icon="ph:magnifying-glass" class="op-40" /></template>
           </NInput>
         </div>
@@ -119,7 +134,7 @@ onMounted(() => { loadSummary(); loadData(); });
       <!-- 统计卡片 -->
       <div class="grid grid-cols-3 gap-16px mb-24px">
         <div class="stat-card">
-          <div class="stat-label">总代理数</div>
+          <div class="stat-label">{{ isAgent ? '直接下线数' : '总代理数' }}</div>
           <div class="stat-row">
             <span class="stat-value text-primary">{{ formatNumber(summaryData.totalAgents) }}</span>
             <span class="stat-period">({{ monthFilter }})</span>
@@ -133,7 +148,7 @@ onMounted(() => { loadSummary(); loadData(); });
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">本月新增代理</div>
+          <div class="stat-label">{{ isAgent ? '个人佣金' : '本月新增代理' }}</div>
           <div class="stat-row">
             <span class="stat-value text-primary">{{ formatNumber(summaryData.newAgents) }}</span>
             <span class="stat-period">({{ monthFilter }})</span>

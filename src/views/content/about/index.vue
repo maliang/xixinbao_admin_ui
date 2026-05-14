@@ -2,7 +2,7 @@
 import { ref, h, onMounted } from 'vue';
 import { NCard, NButton, NInput, NSelect, NModal, NSpace, NSwitch, NDataTable, useDialog } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
-import { fetchStaticPages, createStaticPage, updateStaticPage, deleteStaticPage } from '@/service/api';
+import { fetchStaticPages, createStaticPage, updateStaticPage, deleteStaticPage, fetchActiveLocales } from '@/service/api';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import { useAuthStore } from '@/store/modules/auth';
 
@@ -20,17 +20,14 @@ interface PageRecord { slug: string; pageName: string; title: string; content: s
 const records = ref<PageRecord[]>([]);
 const loading = ref(false);
 
-// 支持的语言列表
-const LOCALES = [
-  { code: 'zh-CN', label: '中文' },
-  { code: 'en', label: 'English' },
-  { code: 'ja', label: '日本語' },
-  { code: 'ko', label: '한국어' },
-  { code: 'zh-TW', label: '繁體中文' },
-  { code: 'vi', label: 'Tiếng Việt' },
-  { code: 'ar', label: 'العربية' },
-  { code: 'bn', label: 'বাংলা' }
-];
+// 从 locales 表获取语言列表
+const LOCALES = ref<{ code: string; label: string }[]>([]);
+async function loadLocales() {
+  const { data, error } = await fetchActiveLocales();
+  if (!error && data) {
+    LOCALES.value = data.map((item: any) => ({ code: item.code, label: item.name || item.label || item.code }));
+  }
+}
 
 const columns = ref<DataTableColumns>([
   { title: '页面标识', key: 'slug', width: 100, render: (row) => h('span', { style: 'font-weight:bold;' }, { default: () => (row as PageRecord).slug }) },
@@ -66,24 +63,91 @@ const columns = ref<DataTableColumns>([
 // ========== 新增页面 ==========
 const addVisible = ref(false);
 const addForm = ref({ slug: '', pageName: '', title: '', content: '', status: true });
+const addTranslations = ref<Record<string, { title: string; content: string }>>({});
+const addLang = ref('zh-CN');
 
 function openAdd() {
   addForm.value = { slug: '', pageName: '', title: '', content: '', status: true };
+  addTranslations.value = {};
+  addLang.value = 'zh-CN';
   addVisible.value = true;
 }
 
+function switchAddLang(lang: string) {
+  // 保存当前语言内容
+  const curLang = addLang.value;
+  if (curLang === 'zh-CN') {
+    // zh-CN 内容保留在 addForm 中
+  } else {
+    addTranslations.value[curLang] = {
+      title: addForm.value.title,
+      content: addForm.value.content
+    };
+  }
+  // 切换语言
+  addLang.value = lang;
+  // 加载目标语言内容
+  if (lang === 'zh-CN') {
+    // 恢复 zh-CN 的值（从 addForm 的 slug/pageName 不变，title/content 需要从缓存恢复）
+    // 由于 zh-CN 的 title/content 一直在 addForm 中，切换回来时需要从临时缓存恢复
+    const zhCache = addTranslations.value['__zh_cache__'];
+    if (zhCache) {
+      addForm.value.title = zhCache.title;
+      addForm.value.content = zhCache.content;
+    }
+  } else {
+    // 如果从 zh-CN 切走，先缓存 zh-CN 的值
+    if (curLang === 'zh-CN') {
+      addTranslations.value['__zh_cache__'] = {
+        title: addForm.value.title,
+        content: addForm.value.content
+      };
+    }
+    const trans = addTranslations.value[lang];
+    addForm.value.title = trans?.title || '';
+    addForm.value.content = trans?.content || '';
+  }
+}
+
 async function handleAdd() {
-  if (!addForm.value.slug || !addForm.value.pageName || !addForm.value.title) {
+  // 保存当前语言内容
+  if (addLang.value !== 'zh-CN') {
+    addTranslations.value[addLang.value] = {
+      title: addForm.value.title,
+      content: addForm.value.content
+    };
+  }
+
+  // 获取 zh-CN 的值
+  const zhTitle = addLang.value === 'zh-CN' ? addForm.value.title : (addTranslations.value['__zh_cache__']?.title || '');
+  const zhContent = addLang.value === 'zh-CN' ? addForm.value.content : (addTranslations.value['__zh_cache__']?.content || '');
+
+  if (!addForm.value.slug || !addForm.value.pageName || !zhTitle) {
     window.$message?.warning('请填写页面标识、页面名称和标题');
     return;
   }
-  const payload = {
+
+  // 构建翻译数据
+  const translations = { ...addTranslations.value };
+  delete translations['zh-CN'];
+  delete translations['__zh_cache__'];
+  Object.keys(translations).forEach(k => {
+    if (!translations[k].title && !translations[k].content) {
+      delete translations[k];
+    }
+  });
+
+  const payload: Record<string, any> = {
     slug: addForm.value.slug,
     page_name: addForm.value.pageName,
-    title: addForm.value.title,
-    content: addForm.value.content,
-    status: addForm.value.status ? 1 : 0
+    title: zhTitle,
+    content: zhContent,
+    status: addForm.value.status ? 1 : 0,
   };
+  if (Object.keys(translations).length > 0) {
+    payload.translations = JSON.stringify(translations);
+  }
+
   const { error } = await createStaticPage(payload);
   if (!error) {
     window.$message?.success('创建成功');
@@ -233,7 +297,7 @@ async function loadData() {
   else { window.$message?.error(error?.msg || '加载失败'); }
 }
 
-onMounted(() => { loadData(); });
+onMounted(() => { loadLocales(); loadData(); });
 </script>
 
 <template>
@@ -262,7 +326,7 @@ onMounted(() => { loadData(); });
     </NCard>
 
     <!-- 新增页面弹窗 -->
-    <NModal v-model:show="addVisible" preset="card" title="新增静态页面" style="width: 640px;" :bordered="false">
+    <NModal v-model:show="addVisible" preset="card" title="新增静态页面" style="width: 700px;" :bordered="false">
       <div class="flex flex-col gap-16px">
         <div>
           <div class="text-13px font-500 mb-6px">页面标识 (slug) <span class="text-red-500">*</span></div>
@@ -273,19 +337,27 @@ onMounted(() => { loadData(); });
           <NInput v-model:value="addForm.pageName" placeholder="如: 隐私政策、用户协议" />
         </div>
         <div>
-          <div class="text-13px font-500 mb-6px">页面标题 <span class="text-red-500">*</span></div>
-          <NInput v-model:value="addForm.title" placeholder="请输入页面标题" />
-        </div>
-        <div>
           <div class="text-13px font-500 mb-6px">状态</div>
           <NSwitch v-model:value="addForm.status">
             <template #checked>已发布</template>
             <template #unchecked>草稿</template>
           </NSwitch>
         </div>
+        <!-- 语言 Tab -->
+        <div class="lang-tab-bar">
+          <span
+            v-for="loc in LOCALES" :key="loc.code"
+            class="lang-tab" :class="{ active: addLang === loc.code }"
+            @click="switchAddLang(loc.code)"
+          >{{ loc.label }}</span>
+        </div>
         <div>
-          <div class="text-13px font-500 mb-6px">页面内容</div>
-          <RichTextEditor v-model="addForm.content" placeholder="请输入页面内容..." height="300px" />
+          <div class="text-13px font-500 mb-6px">页面标题 <span class="text-red-500">*</span> <span class="text-11px op-40">({{ addLang }})</span></div>
+          <NInput v-model:value="addForm.title" placeholder="请输入页面标题" />
+        </div>
+        <div>
+          <div class="text-13px font-500 mb-6px">页面内容 <span class="text-11px op-40">({{ addLang }})</span></div>
+          <RichTextEditor v-model="addForm.content" placeholder="请输入页面内容..." height="300px" :key="addLang" />
         </div>
       </div>
       <template #footer>

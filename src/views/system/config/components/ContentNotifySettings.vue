@@ -1,11 +1,24 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NButton, NInput, NInputNumber, NSelect, NSwitch, NCheckbox, NModal, NForm, NFormItem, NTag, useDialog } from 'naive-ui';
+import { NButton, NInput, NInputNumber, NSelect, NSwitch, NCheckbox, NModal, NForm, NFormItem, NTag, NTabs, NTabPane, useDialog } from 'naive-ui';
 import ImageUpload from '@/components/common/ImageUpload.vue';
-import { fetchBanners, createBanner, updateBanner, deleteBanner, fetchSettings, saveSettings } from '@/service/api';
+import { fetchBanners, fetchBannerDetail, createBanner, updateBanner, deleteBanner, fetchSettings, saveSettings } from '@/service/api';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 const dialog = useDialog();
 const subTab = ref('banner');
+
+// ========== 多语言编辑器 ==========
+const {
+  currentLang,
+  locales,
+  formFields: langFormFields,
+  loadLocales,
+  switchLang,
+  initEditor,
+  buildPayload,
+  saveCurrentContent
+} = useLanguageEditor({ fields: ['title'] });
 
 // ========== 轮播图管理 ==========
 const banners = ref<any[]>([]);
@@ -19,16 +32,36 @@ async function loadBanners() {
     banners.value = Array.isArray(data) ? data : (data?.list || []);
   }
 }
-function openBannerCreate() { bannerModalTitle.value = '新增轮播图'; bannerForm.value = { id: null, image: '', title: '', link: '', sort: 0, status: true }; bannerModalVisible.value = true; }
-function openBannerEdit(row: any) { bannerModalTitle.value = '编辑轮播图'; bannerForm.value = { id: row.id, image: row.image || '', title: row.title, link: row.link || '', sort: row.sort, status: row.status }; bannerModalVisible.value = true; }
+function openBannerCreate() {
+  bannerModalTitle.value = '新增轮播图';
+  bannerForm.value = { id: null, image: '', title: '', link: '', sort: 0, status: true };
+  initEditor({ title: '' }, {});
+  bannerModalVisible.value = true;
+}
+async function openBannerEdit(row: any) {
+  bannerModalTitle.value = '编辑轮播图';
+  // 从详情接口获取完整数据（含 translations）
+  const { data, error } = await fetchBannerDetail(row.id);
+  if (error) {
+    window.$message?.error('获取详情失败');
+    return;
+  }
+  const detail = data;
+  bannerForm.value = { id: detail.id, image: detail.image || '', title: detail.title || '', link: detail.link || '', sort: detail.sort, status: detail.status };
+  initEditor({ title: detail.title || '' }, detail.translations || {});
+  bannerModalVisible.value = true;
+}
 async function handleBannerSave() {
   if (!bannerForm.value.image) { window.$message?.warning('请上传轮播图片'); return; }
-  const payload = {
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+  const payload: Record<string, any> = {
     image: bannerForm.value.image,
-    title: bannerForm.value.title,
+    title: zhFields.title || '',
     link: bannerForm.value.link,
     sort: bannerForm.value.sort,
-    status: bannerForm.value.status
+    status: bannerForm.value.status,
+    translations: translationsJson
   };
   if (bannerForm.value.id) {
     const { error } = await updateBanner(bannerForm.value.id, payload);
@@ -178,6 +211,7 @@ async function handleSoundUpload(event: Event, soundKey: string) {
 }
 
 loadBanners();
+loadLocales();
 loadSoundSettings();
 </script>
 
@@ -198,10 +232,10 @@ loadSoundSettings();
 
       <table class="banner-table">
         <thead>
-          <tr><th>缩略图</th><th>标题</th><th>链接</th><th>排序</th><th>状态</th><th>操作</th></tr>
+          <tr><th>缩略图</th><th>标题</th><th>语言</th><th>链接</th><th>排序</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody>
-          <tr v-if="banners.length === 0"><td colspan="6" class="text-center op-40 py-40px">暂无轮播图</td></tr>
+          <tr v-if="banners.length === 0"><td colspan="7" class="text-center op-40 py-40px">暂无轮播图</td></tr>
           <tr v-for="row in banners" :key="row.id">
             <td>
               <div class="w-60px h-40px rounded bg-gray-100 flex-center overflow-hidden">
@@ -210,6 +244,11 @@ loadSoundSettings();
               </div>
             </td>
             <td>{{ row.title }}</td>
+            <td>
+              <div class="flex items-center gap-4px flex-wrap">
+                <NTag v-for="code in (row.locales || ['zh-CN'])" :key="code" size="tiny" :bordered="false">{{ code }}</NTag>
+              </div>
+            </td>
             <td class="text-12px op-60">{{ row.link || '-' }}</td>
             <td>{{ row.sort }}</td>
             <td><NTag :type="row.status ? 'success' : 'default'" size="small" :bordered="false">{{ row.status ? '显示' : '隐藏' }}</NTag></td>
@@ -281,6 +320,11 @@ loadSoundSettings();
     <!-- 新增/编辑轮播图弹窗 -->
     <NModal v-model:show="bannerModalVisible" preset="card" :title="bannerModalTitle" style="width: 520px;" :bordered="false">
       <NForm label-placement="top" size="small">
+        <!-- Language Tab -->
+        <NTabs v-if="locales.length > 0" :value="currentLang" type="line" size="small" class="mb-16px" @update:value="switchLang">
+          <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+        </NTabs>
+
         <NFormItem label="轮播图片" required>
           <div class="flex items-start gap-16px">
             <ImageUpload v-model="bannerForm.image" width="100px" height="100px" />
@@ -291,7 +335,7 @@ loadSoundSettings();
           </div>
         </NFormItem>
         <NFormItem label="图片标题">
-          <NInput v-model:value="bannerForm.title" placeholder="请输入轮播图标题" />
+          <NInput v-model:value="langFormFields.title" placeholder="请输入轮播图标题" />
         </NFormItem>
         <NFormItem label="跳转链接">
           <NInput v-model:value="bannerForm.link" placeholder="例如: /activity/spring 或 https://..." />

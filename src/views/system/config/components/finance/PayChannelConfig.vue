@@ -285,6 +285,7 @@ loadData();
       <NForm label-placement="top" size="small">
         <NFormItem label="通道名称"><NInput v-model:value="editForm.name" /></NFormItem>
         <NFormItem label="状态"><NSelect v-model:value="editForm.status" :options="[{label:'启用',value:'enabled'},{label:'停用',value:'disabled'},{label:'维护中',value:'maintenance'}]" /></NFormItem>
+        <NFormItem label="支持操作类型"><NCheckbox v-model:checked="editForm.supportRecharge">充值</NCheckbox><NCheckbox v-model:checked="editForm.supportWithdraw" class="ml-12px">提现</NCheckbox></NFormItem>
         <template v-if="editForm.type === 'crypto'">
           <NFormItem label="币种类型"><NInput v-model:value="editForm.coinType" /></NFormItem>
           <NFormItem label="钱包地址"><NInput v-model:value="editForm.walletAddress" /></NFormItem>

@@ -2,15 +2,21 @@
 import { ref, h, computed, onMounted, watch } from 'vue';
 import {
   NCard, NButton, NInput, NSelect, NInputNumber, NPagination,
-  NModal, NSpace, NSwitch, NDataTable, useDialog
+  NModal, NSpace, NSwitch, NDataTable, NTag, NTabs, NTabPane, useDialog
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
-import { fetchMarquees, createMarquee, updateMarquee, deleteMarquee, toggleMarquee } from '@/service/api';
+import { fetchMarquees, fetchMarqueeDetail, createMarquee, updateMarquee, deleteMarquee, toggleMarquee } from '@/service/api';
 import { useAuthStore } from '@/store/modules/auth';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'ContentMarqueePage' });
 const dialog = useDialog();
 const authStore = useAuthStore();
+
+// 多语言编辑器（可翻译字段：content）
+const {
+  currentLang, locales, formFields, switchLang, initEditor, buildPayload, loadLocales
+} = useLanguageEditor({ fields: ['content'] });
 
 const searchKeyword = ref('');
 const statusFilter = ref('' as string);
@@ -26,7 +32,7 @@ const totalPages = computed(() => Math.ceil(totalRecords.value / pageSize) || 1)
 
 interface MarqueeRecord {
   id: number; index: number; content: string; sort: number; status: boolean;
-  createdAt: string; link: string; remark: string;
+  createdAt: string; link: string; remark: string; translations?: any;
 }
 const records = ref<MarqueeRecord[]>([]);
 
@@ -65,6 +71,13 @@ const columns = computed<DataTableColumns>(() => [
     title: '状态', key: 'status', width: 70, align: 'center',
     render: (row) => h(NSwitch, { value: (row as MarqueeRecord).status, 'onUpdate:value': (v: boolean) => { (row as MarqueeRecord).status = v; } })
   },
+  {
+    title: '语言', key: 'locales', width: 120,
+    render: (row) => {
+      const locales = (row as any).locales || ['zh-CN'];
+      return h(NSpace, { size: 4 }, () => locales.map((code: string) => h(NTag, { size: 'tiny', bordered: false }, () => code)));
+    }
+  },
   { title: '创建时间', key: 'createdAt', width: 160 },
   {
     title: '操作', key: 'action', width: 120, align: 'center',
@@ -79,26 +92,51 @@ const editVisible = ref(false);
 const editTitle = ref('新增轮播消息');
 const isEdit = ref(false);
 const editIndex = ref(-1);
-const editForm = ref({ content: '', sort: 50, status: true, link: '', remark: '' });
-const contentLength = computed(() => editForm.value.content.length);
+const editForm = ref({ sort: 50, status: true, link: '', remark: '' });
 const contentError = ref(false);
+const contentLength = computed(() => (formFields.value.content || '').length);
 
 function openCreate() {
   editTitle.value = '新增轮播消息'; isEdit.value = false;
-  editForm.value = { content: '', sort: 50, status: true, link: '', remark: '' };
+  editForm.value = { sort: 50, status: true, link: '', remark: '' };
+  initEditor({ content: '' }, {});
   contentError.value = false; editVisible.value = true;
 }
 
-function openEdit(r: MarqueeRecord) {
+async function openEdit(r: MarqueeRecord) {
   editTitle.value = '编辑轮播消息'; isEdit.value = true; editIndex.value = r.id;
-  editForm.value = { content: r.content, sort: r.sort, status: r.status, link: r.link, remark: r.remark };
-  contentError.value = false; editVisible.value = true;
+  editForm.value = { sort: r.sort, status: r.status, link: r.link, remark: r.remark };
+  contentError.value = false;
+
+  // 从详情接口获取完整 translations 数据
+  const { data, error } = await fetchMarqueeDetail(r.id);
+  if (!error && data) {
+    const translations = data.translations || {};
+    initEditor({ content: data.content || '' }, translations);
+  } else {
+    initEditor({ content: r.content || '' }, {});
+  }
+  editVisible.value = true;
 }
 
 async function handleSubmit() {
-  if (!editForm.value.content.trim()) { contentError.value = true; return; }
+  if (!formFields.value.content.trim() && currentLang.value === 'zh-CN') {
+    contentError.value = true; return;
+  }
   contentError.value = false;
-  const payload = { content: editForm.value.content, sort: editForm.value.sort, status: editForm.value.status, link: editForm.value.link, remark: editForm.value.remark };
+
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+
+  const payload: Record<string, any> = {
+    content: zhFields.content,
+    sort: editForm.value.sort,
+    status: editForm.value.status,
+    link: editForm.value.link,
+    remark: editForm.value.remark,
+    translations: translationsJson
+  };
+
   if (isEdit.value) {
     const { error } = await updateMarquee(editIndex.value, payload);
     if (!error) { window.$message?.success('更新成功'); editVisible.value = false; loadData(); }
@@ -134,7 +172,7 @@ async function loadData() {
 }
 
 watch(currentPage, loadData);
-onMounted(() => { loadData(); });
+onMounted(() => { loadLocales(); loadData(); });
 </script>
 
 <template>
@@ -163,18 +201,30 @@ onMounted(() => { loadData(); });
 
     <NModal v-model:show="editVisible" preset="card" :title="editTitle" style="width: 520px;" :bordered="false">
       <div class="flex flex-col gap-18px">
+        <!-- Language Tab -->
+        <NTabs v-if="locales.length > 1" :value="currentLang" type="segment" size="small" @update:value="switchLang">
+          <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+        </NTabs>
+
         <div>
-          <div class="text-13px font-500 mb-6px">消息内容 <span style="color:#d03050;">*</span></div>
-          <NInput v-model:value="editForm.content" type="textarea" :rows="3" placeholder="请输入走马灯展示的文字，建议不超过 80 字" :maxlength="100" :status="contentError ? 'error' : undefined" />
+          <div class="text-13px font-500 mb-6px">
+            消息内容
+            <span v-if="currentLang === 'zh-CN'" style="color:#d03050;">*</span>
+          </div>
+          <NInput v-model:value="formFields.content" type="textarea" :rows="3" placeholder="请输入走马灯展示的文字，建议不超过 80 字" :maxlength="100" :status="contentError ? 'error' : undefined" />
           <div class="flex items-center justify-between mt-4px">
             <span v-if="contentError" class="text-11px" style="color:#d03050;">请输入消息内容</span><span v-else></span>
             <span class="text-11px op-40">{{ contentLength }}/100</span>
           </div>
         </div>
-        <div><div class="text-13px font-500 mb-6px">排序顺序 <span style="color:#d03050;">*</span></div><NInputNumber v-model:value="editForm.sort" :min="1" class="w-full" /><div class="text-11px op-40 mt-4px">数值越小越靠前滚动</div></div>
-        <div><div class="text-13px font-500 mb-6px">状态</div><div class="flex items-center gap-8px"><NSwitch v-model:value="editForm.status" /><span class="text-13px">启用</span></div></div>
-        <div><div class="text-13px font-500 mb-6px">链接地址</div><NInput v-model:value="editForm.link" placeholder="https://... 用户点击走马灯后可跳转（不填则不跳转）" /></div>
-        <div><div class="text-13px font-500 mb-6px">备注</div><NInput v-model:value="editForm.remark" placeholder="仅后台使用，前台不展示" /></div>
+
+        <!-- 以下字段仅在 zh-CN 时显示（非翻译字段） -->
+        <template v-if="currentLang === 'zh-CN'">
+          <div><div class="text-13px font-500 mb-6px">排序顺序 <span style="color:#d03050;">*</span></div><NInputNumber v-model:value="editForm.sort" :min="1" class="w-full" /><div class="text-11px op-40 mt-4px">数值越小越靠前滚动</div></div>
+          <div><div class="text-13px font-500 mb-6px">状态</div><div class="flex items-center gap-8px"><NSwitch v-model:value="editForm.status" /><span class="text-13px">启用</span></div></div>
+          <div><div class="text-13px font-500 mb-6px">链接地址</div><NInput v-model:value="editForm.link" placeholder="https://... 用户点击走马灯后可跳转（不填则不跳转）" /></div>
+          <div><div class="text-13px font-500 mb-6px">备注</div><NInput v-model:value="editForm.remark" placeholder="仅后台使用，前台不展示" /></div>
+        </template>
       </div>
       <template #footer><NSpace justify="end"><NButton @click="editVisible = false">取消</NButton><NButton type="primary" @click="handleSubmit">确定</NButton></NSpace></template>
     </NModal>

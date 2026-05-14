@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { ref, h, resolveComponent, computed, onMounted, watch } from 'vue';
 import {
-  NCard, NDataTable, NButton, NSpace, NSwitch, NInput, NSelect, NInputNumber,
-  NPagination, NModal, NForm, NFormItem, NUpload, NCheckbox, NImage, useDialog
+  NCard, NDataTable, NButton, NSpace, NTag, NSwitch, NInput, NSelect, NInputNumber,
+  NPagination, NModal, NForm, NFormItem, NUpload, NCheckbox, NImage, NTabs, NTabPane, useDialog
 } from 'naive-ui';
 import ImageUpload from '@/components/common/ImageUpload.vue';
-import { fetchMallCategories, createMallCategory, updateMallCategory, deleteMallCategory, sortMallCategories } from '@/service/api';
+import { fetchMallCategories, fetchMallCategoryDetail, createMallCategory, updateMallCategory, deleteMallCategory, sortMallCategories } from '@/service/api';
 import { useAuthStore } from '@/store/modules/auth';
+import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'MallCategoryPage' });
 const dialog = useDialog();
 const authStore = useAuthStore();
+
+// 多语言编辑器（可翻译字段：name）
+const {
+  currentLang, locales, formFields: langFields, switchLang, initEditor, buildPayload, loadLocales
+} = useLanguageEditor({ fields: ['name'] });
 
 // ========== 筛选 ==========
 const keyword = ref('');
@@ -56,6 +62,13 @@ const columns = [
     title: '状态', key: 'status', width: 80, align: 'center' as const,
     render: (row: any) => h(NSwitch, { value: row.status, size: 'small', onUpdateValue: () => handleToggleStatus(row) })
   },
+  {
+    title: '语言', key: 'locales', width: 120,
+    render: (row: any) => {
+      const locales = row.locales || ['zh-CN'];
+      return h(NSpace, { size: 4 }, () => locales.map((code: string) => h(NTag, { size: 'tiny', bordered: false }, () => code)));
+    }
+  },
   { title: '商品数量', key: 'goodsCount', width: 90, align: 'center' as const },
   { title: '创建时间', key: 'createdAt', width: 120, align: 'center' as const },
   {
@@ -95,7 +108,6 @@ const modalVisible = ref(false);
 const modalTitle = ref('新增商品分类');
 const formData = ref({
   id: null as number | null,
-  name: '',
   image: '',
   parentId: 0 as number,
   sort: 1,
@@ -121,16 +133,42 @@ function openModal(row?: any) {
   buildParentOptions();
   if (row) {
     modalTitle.value = '编辑商品分类';
-    formData.value = { id: row.id, name: row.name, image: row.image || '', parentId: row.parentId || 0, sort: row.sort, enabled: row.status };
+    formData.value = { id: row.id, image: row.image || '', parentId: row.parentId || 0, sort: row.sort, enabled: row.status };
+    // 从详情接口获取完整 translations 数据
+    fetchMallCategoryDetail(row.id).then(({ data: detail, error }) => {
+      if (!error && detail) {
+        const translations = detail.translations || {};
+        initEditor({ name: detail.name || '' }, translations);
+      } else {
+        initEditor({ name: row.name || '' }, {});
+      }
+    });
   } else {
     modalTitle.value = '新增商品分类';
-    formData.value = { id: null, name: '', image: '', parentId: 0, sort: 1, enabled: true };
+    formData.value = { id: null, image: '', parentId: 0, sort: 1, enabled: true };
+    initEditor({ name: '' }, {});
   }
   modalVisible.value = true;
 }
 
 async function handleSaveCategory() {
-  const payload = { name: formData.value.name, image: formData.value.image, parent_id: formData.value.parentId, sort: formData.value.sort, status: formData.value.enabled ? 1 : 0 };
+  if (!langFields.value.name && currentLang.value === 'zh-CN') {
+    window.$message?.warning('请输入分类名称');
+    return;
+  }
+
+  // 构建多语言 payload
+  const { zhFields, translationsJson } = buildPayload();
+
+  const payload: Record<string, any> = {
+    name: zhFields.name,
+    image: formData.value.image,
+    parent_id: formData.value.parentId,
+    sort: formData.value.sort,
+    status: formData.value.enabled ? 1 : 0,
+    translations: translationsJson
+  };
+
   if (formData.value.id) {
     const { error } = await updateMallCategory(formData.value.id, payload);
     if (!error) {
@@ -233,7 +271,7 @@ function handleReset() {
   loadData();
 }
 
-onMounted(() => { loadData(); });
+onMounted(() => { loadLocales(); loadData(); });
 </script>
 
 <template>
@@ -285,26 +323,35 @@ onMounted(() => { loadData(); });
     <!-- 新增/编辑弹窗 -->
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 500px;" :bordered="false">
       <NForm label-placement="top" size="small">
-        <NFormItem label="上级分类">
-          <NSelect v-model:value="formData.parentId" :options="parentCategoryOptions" placeholder="选择上级分类" />
-        </NFormItem>
+        <!-- Language Tab -->
+        <NTabs v-if="locales.length > 1" :value="currentLang" type="segment" size="small" @update:value="switchLang" class="mb-16px">
+          <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
+        </NTabs>
+
         <NFormItem label="分类名称">
-          <NInput v-model:value="formData.name" placeholder="请输入分类名称" />
+          <NInput v-model:value="langFields.name" placeholder="请输入分类名称" />
         </NFormItem>
-        <NFormItem label="排序值">
-          <NInputNumber v-model:value="formData.sort" class="w-full" />
-        </NFormItem>
-        <NFormItem label="分类图标">
-          <ImageUpload v-model="formData.image" width="80px" height="80px" />
-        </NFormItem>
-        <NFormItem>
-          <NCheckbox v-model:checked="formData.enabled">启用该分类</NCheckbox>
-        </NFormItem>
+
+        <!-- 以下字段仅在 zh-CN 时显示（非翻译字段） -->
+        <template v-if="currentLang === 'zh-CN'">
+          <NFormItem label="上级分类">
+            <NSelect v-model:value="formData.parentId" :options="parentCategoryOptions" placeholder="选择上级分类" />
+          </NFormItem>
+          <NFormItem label="排序值">
+            <NInputNumber v-model:value="formData.sort" class="w-full" />
+          </NFormItem>
+          <NFormItem label="分类图标">
+            <ImageUpload v-model="formData.image" width="80px" height="80px" />
+          </NFormItem>
+          <NFormItem>
+            <NCheckbox v-model:checked="formData.enabled">启用该分类</NCheckbox>
+          </NFormItem>
+        </template>
       </NForm>
       <template #footer>
         <NSpace justify="end">
           <NButton @click="modalVisible = false">取消</NButton>
-          <NButton type="primary" @click="handleSaveCategory">确认添加</NButton>
+          <NButton type="primary" @click="handleSaveCategory">确认保存</NButton>
         </NSpace>
       </template>
     </NModal>
