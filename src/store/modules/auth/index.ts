@@ -156,7 +156,7 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
         roles: [isSuperAdmin ? 'R_SUPER' : 'R_ADMIN'],
         buttons: [],
         permissions: loginToken.user.permissions || [],
-        isAgent: loginToken.user.is_agent || false
+        isAgent: loginToken.user.isAgent || false
       });
       token.value = loginToken.token;
       return true;

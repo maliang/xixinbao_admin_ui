@@ -11,8 +11,8 @@ declare namespace Api {
         avatar: string | null;
         role: string;
         permissions?: string[];
-        is_agent?: boolean;
-        agent_id?: number | null;
+        isAgent?: boolean;
+        agentId?: number | null;
       };
     }
 
