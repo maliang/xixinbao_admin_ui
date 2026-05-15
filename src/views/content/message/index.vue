@@ -3,7 +3,7 @@ import { ref, h, computed, onMounted, watch } from 'vue';
 import {
   NCard, NButton, NInput, NSelect, NDatePicker, NPagination,
   NCollapse, NCollapseItem, NGrid, NGridItem, NModal, NSpace,
-  NRadio, NRadioGroup, NTag, NDynamicTags, NDataTable, NTabs, NTabPane, useDialog
+  NRadio, NRadioGroup, NTag, NDataTable, NTabs, NTabPane, useDialog
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { fetchMessages, createMessage, updateMessage, deleteMessage, sendMessage } from '@/service/api';
@@ -120,6 +120,29 @@ function openCreate() {
   initEditor({ title: '', content: '' }, {});
   editVisible.value = true;
 }
+
+// 处理标签输入：支持逗号、中文逗号分隔输入多个账号
+function handleMemberInput(val: string) {
+  if (val.includes(',') || val.includes('，')) {
+    const parts = val.split(/[,，]+/).map(s => s.trim()).filter(Boolean);
+    const newTags = parts.filter(p => !editForm.value.targetMembers.includes(p));
+    editForm.value.targetMembers.push(...newTags);
+    memberInput.value = '';
+  }
+}
+function handleMemberInputConfirm() {
+  const val = memberInput.value.trim();
+  if (val) {
+    const parts = val.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+    const newTags = parts.filter(p => !editForm.value.targetMembers.includes(p));
+    editForm.value.targetMembers.push(...newTags);
+    memberInput.value = '';
+  }
+}
+function removeMember(idx: number) {
+  editForm.value.targetMembers.splice(idx, 1);
+}
+const memberInput = ref('');
 
 async function openEdit(r: MessageRecord) {
   // 先获取消息详情（含目标用户账号和 translations）
@@ -296,7 +319,10 @@ onMounted(() => { loadLocales(); loadData(); });
             <NRadio value="all" class="ml-16px">所有会员</NRadio>
           </NRadioGroup>
           <div v-if="editForm.targetType === 'specific'" class="mt-8px">
-            <NDynamicTags v-model:value="editForm.targetMembers" />
+            <div v-if="editForm.targetMembers.length" class="flex flex-wrap gap-4px mb-8px">
+              <NTag v-for="(m, idx) in editForm.targetMembers" :key="m" size="small" closable @close="removeMember(idx)">{{ m }}</NTag>
+            </div>
+            <NInput v-model:value="memberInput" placeholder="输入会员账号，逗号分隔或回车确认" @input="handleMemberInput" @keydown.enter.prevent="handleMemberInputConfirm" />
             <div class="text-11px op-40 mt-4px">可输入多个会员账号，用逗号或回车分隔</div>
           </div>
           <div v-if="editForm.targetType === 'all'" class="hint-box mt-8px">消息将发送给平台所有注册会员</div>
