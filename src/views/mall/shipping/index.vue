@@ -4,18 +4,22 @@ import {
   NCard, NDataTable, NButton, NSpace, NTag, NInput, NSelect, NInputNumber,
   NPagination, NModal, NForm, NFormItem, NDatePicker, NTabs, NTabPane, useDialog
 } from 'naive-ui';
-import { fetchShippingOrders, fetchShippingDetail, updateShippingLogistics } from '@/service/api';
+import { fetchShippingOrders, fetchShippingDetail, updateShippingLogistics, fetchActiveLocales } from '@/service/api';
 import { useAuthStore } from '@/store/modules/auth';
-import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
 
 defineOptions({ name: 'MallShippingPage' });
 const dialog = useDialog();
 const authStore = useAuthStore();
 
-// 多语言编辑器（可翻译字段：description）
-const {
-  currentLang, locales, formFields: langFields, switchLang, initEditor, buildPayload, loadLocales
-} = useLanguageEditor({ fields: ['description'] });
+// 多语言：从后端获取语言列表
+const locales = ref<{ code: string; label: string; name?: string }[]>([]);
+const currentLang = ref('zh-CN');
+async function loadLocales() {
+  const { data, error } = await fetchActiveLocales();
+  if (!error && data) {
+    locales.value = data.map((item: any) => ({ code: item.code, label: item.name || item.label || item.code }));
+  }
+}
 
 // ========== 筛选 ==========
 const keyword = ref('');
@@ -91,6 +95,12 @@ const orderStatusOptions = [
 // 当前正在编辑的进度项索引（-1 表示新增模式）
 const editingProgressIndex = ref(-1);
 
+// 中文物流进度列表（主数据）
+const zhProgressList = ref<{ time: string; desc: string }[]>([]);
+
+// 其他语言的翻译（key: lang, value: { [index]: desc }）
+const progressTranslations = ref<Record<string, Record<number, string>>>({});
+
 async function openLogistics(row: any) {
   editingOrderId.value = row.id;
 
@@ -104,86 +114,111 @@ async function openLogistics(row: any) {
     progressData = row.shippingProgress || row.shipping_progress || [];
   }
 
-  var progressList = progressData.map(function (p: any) {
-    return {
-      time: p.createdAt || p.created_at || '',
-      desc: p.description || '',
-      locales: p.locales || ['zh-CN'],
-      translations: p.translations || {}
-    };
+  // 解析进度数据
+  const zhList: { time: string; desc: string }[] = [];
+  const transMap: Record<string, Record<number, string>> = {};
+
+  progressData.forEach((p: any, idx: number) => {
+    const time = p.createdAt || p.created_at || '';
+    const desc = p.description || '';
+    const translations = p.translations || {};
+
+    zhList.push({ time, desc });
+
+    // 提取其他语言翻译
+    Object.keys(translations).forEach(lang => {
+      if (!transMap[lang]) transMap[lang] = {};
+      const transDesc = translations[lang]?.description || '';
+      if (transDesc) {
+        transMap[lang][idx] = transDesc;
+      }
+    });
   });
+
+  zhProgressList.value = zhList;
+  progressTranslations.value = transMap;
 
   logisticsForm.value = {
     orderStatus: row.status,
     carrier: row.carrier || '',
     trackingNo: row.trackingNo || row.tracking_no || '',
     newProgressTime: null,
-    progressList: progressList
+    progressList: []
   };
 
-  // 初始化语言编辑器为新增模式（空内容）
   editingProgressIndex.value = -1;
-  initEditor({ description: '' }, {});
+  newProgressDesc.value = '';
+  currentLang.value = 'zh-CN';
   logisticsVisible.value = true;
 }
 
-function addProgress() {
-  if (!langFields.value.description.trim() && currentLang.value === 'zh-CN') return;
+// 新增进度的描述输入
+const newProgressDesc = ref('');
 
-  // 构建多语言 payload
-  const { zhFields, translationsJson } = buildPayload();
-  const translations = JSON.parse(translationsJson);
+function addProgress() {
+  if (!newProgressDesc.value.trim()) return;
+  if (currentLang.value !== 'zh-CN') return; // 只有中文可以新增
 
   const now = new Date();
   const timeStr = logisticsForm.value.newProgressTime
     ? new Date(logisticsForm.value.newProgressTime).toLocaleString()
     : now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
 
-  logisticsForm.value.progressList.unshift({
-    time: timeStr,
-    desc: zhFields.description,
-    translations: Object.keys(translations).length > 0 ? translations : undefined
-  });
-
-  // 重置语言编辑器
-  initEditor({ description: '' }, {});
+  zhProgressList.value.unshift({ time: timeStr, desc: newProgressDesc.value.trim() });
+  newProgressDesc.value = '';
   logisticsForm.value.newProgressTime = null;
 }
 
 function editProgress(index: number) {
+  if (currentLang.value !== 'zh-CN') return;
   editingProgressIndex.value = index;
-  const item = logisticsForm.value.progressList[index];
-  initEditor({ description: item.desc || '' }, item.translations || {});
+  newProgressDesc.value = zhProgressList.value[index]?.desc || '';
 }
 
 function saveEditProgress() {
   if (editingProgressIndex.value < 0) return;
-
-  const { zhFields, translationsJson } = buildPayload();
-  const translations = JSON.parse(translationsJson);
-  const item = logisticsForm.value.progressList[editingProgressIndex.value];
-
-  item.desc = zhFields.description;
-  item.translations = Object.keys(translations).length > 0 ? translations : undefined;
-
-  // 退出编辑模式
+  if (currentLang.value !== 'zh-CN') return;
+  zhProgressList.value[editingProgressIndex.value].desc = newProgressDesc.value.trim();
   editingProgressIndex.value = -1;
-  initEditor({ description: '' }, {});
+  newProgressDesc.value = '';
 }
 
 function cancelEditProgress() {
   editingProgressIndex.value = -1;
-  initEditor({ description: '' }, {});
+  newProgressDesc.value = '';
 }
 
 function removeProgress(index: number) {
-  logisticsForm.value.progressList.splice(index, 1);
+  if (currentLang.value !== 'zh-CN') return;
+  zhProgressList.value.splice(index, 1);
+  // 同步删除所有语言中该索引的翻译，并重新映射索引
+  Object.keys(progressTranslations.value).forEach(lang => {
+    const newMap: Record<number, string> = {};
+    Object.keys(progressTranslations.value[lang]).forEach(k => {
+      const oldIdx = Number(k);
+      if (oldIdx < index) newMap[oldIdx] = progressTranslations.value[lang][oldIdx];
+      else if (oldIdx > index) newMap[oldIdx - 1] = progressTranslations.value[lang][oldIdx];
+      // oldIdx === index 的被删除
+    });
+    progressTranslations.value[lang] = newMap;
+  });
   if (editingProgressIndex.value === index) {
     editingProgressIndex.value = -1;
-    initEditor({ description: '' }, {});
+    newProgressDesc.value = '';
   } else if (editingProgressIndex.value > index) {
     editingProgressIndex.value--;
   }
+}
+
+// 获取某条进度在某语言下的翻译
+function getTranslation(lang: string, index: number): string {
+  return progressTranslations.value[lang]?.[index] || '';
+}
+
+// 设置某条进度在某语言下的翻译
+function setTranslation(lang: string, index: number, value: string) {
+  if (!progressTranslations.value[lang]) progressTranslations.value[lang] = {};
+  progressTranslations.value[lang][index] = value;
 }
 
 function useCurrentTime() {
@@ -199,12 +234,26 @@ const editingOrderId = ref<number | null>(null);
 async function handleSaveLogistics() {
   if (!editingOrderId.value) return;
 
-  // 构建进度列表（含 translations）
-  const progressPayload = logisticsForm.value.progressList.map(item => ({
-    time: item.time,
-    desc: item.desc,
-    translations: item.translations ? JSON.stringify(item.translations) : undefined
-  }));
+  // 如果正在编辑某个进度项，先保存
+  if (editingProgressIndex.value >= 0) {
+    saveEditProgress();
+  }
+
+  // 构建后端格式：每条中文进度 + 对应的 translations
+  const progressPayload = zhProgressList.value.map((item, index) => {
+    const translations: Record<string, Record<string, string>> = {};
+    Object.keys(progressTranslations.value).forEach(lang => {
+      const desc = progressTranslations.value[lang]?.[index];
+      if (desc && desc.trim()) {
+        translations[lang] = { description: desc.trim() };
+      }
+    });
+    return {
+      time: item.time,
+      desc: item.desc,
+      translations: JSON.stringify(translations)
+    };
+  });
 
   const { error } = await updateShippingLogistics(editingOrderId.value, {
     status: logisticsForm.value.orderStatus,
@@ -295,42 +344,60 @@ onMounted(() => { loadLocales(); loadData(); });
         <NFormItem label="物流进度">
           <div class="w-full">
             <!-- Language Tab -->
-            <NTabs v-if="locales.length > 1" :value="currentLang" type="segment" size="small" class="mb-8px" @update:value="switchLang">
+            <NTabs v-if="locales.length > 1" :value="currentLang" type="segment" size="small" class="mb-8px" @update:value="(v: string) => { editingProgressIndex = -1; newProgressDesc = ''; currentLang = v; }">
               <NTabPane v-for="locale in locales" :key="locale.code" :name="locale.code" :tab="locale.label" />
             </NTabs>
 
-            <!-- 新增/编辑进度输入区 -->
-            <NInput v-model:value="langFields.description" type="textarea" :rows="2" :placeholder="editingProgressIndex >= 0 ? '编辑物流进度信息' : '输入新的物流进度信息'" class="mb-8px" />
+            <!-- 中文模式：可新增/编辑/删除 -->
+            <template v-if="currentLang === 'zh-CN'">
+              <NInput v-model:value="newProgressDesc" type="textarea" :rows="2" :placeholder="editingProgressIndex >= 0 ? '编辑物流进度信息' : '输入新的物流进度信息'" class="mb-8px" />
 
-            <div v-if="editingProgressIndex < 0" class="flex items-center gap-8px mb-12px">
-              <NDatePicker v-model:value="logisticsForm.newProgressTime" type="datetime" size="small" class="flex-1" />
-              <span class="text-12px op-50">或</span>
-              <NButton size="small" quaternary @click="useCurrentTime">使用当前时间</NButton>
-              <NButton size="small" type="primary" @click="addProgress">添加</NButton>
-            </div>
-            <div v-else class="flex items-center gap-8px mb-12px">
-              <NButton size="small" type="primary" @click="saveEditProgress">保存修改</NButton>
-              <NButton size="small" @click="cancelEditProgress">取消</NButton>
-            </div>
-
-            <!-- 进度列表 -->
-            <div v-for="(item, index) in logisticsForm.progressList" :key="index"
-              class="flex items-start gap-8px p-10px mb-6px rounded-6px"
-              :style="{ background: editingProgressIndex === index ? '#e8f4ff' : '#f9f9f9' }">
-              <div class="flex-1">
-                <div class="text-11px op-50">{{ item.time }}</div>
-                <div class="text-13px mt-2px">{{ item.desc }}</div>
-                <div v-if="item.locales && item.locales.length > 1" class="flex items-center gap-4px mt-4px">
-                  <NTag v-for="code in item.locales" :key="code" size="tiny" :bordered="false">{{ code }}</NTag>
-                </div>
+              <div v-if="editingProgressIndex < 0" class="flex items-center gap-8px mb-12px">
+                <NDatePicker v-model:value="logisticsForm.newProgressTime" type="datetime" size="small" class="flex-1" />
+                <span class="text-12px op-50">或</span>
+                <NButton size="small" quaternary @click="useCurrentTime">使用当前时间</NButton>
+                <NButton size="small" type="primary" @click="addProgress">添加</NButton>
               </div>
-              <NButton size="tiny" quaternary @click="editProgress(index)">
-                <SvgIcon icon="ph:pencil" class="text-14px" />
-              </NButton>
-              <NButton size="tiny" type="error" quaternary @click="removeProgress(index)">
-                <SvgIcon icon="ph:trash" class="text-14px" />
-              </NButton>
-            </div>
+              <div v-else class="flex items-center gap-8px mb-12px">
+                <NButton size="small" type="primary" @click="saveEditProgress">保存修改</NButton>
+                <NButton size="small" @click="cancelEditProgress">取消</NButton>
+              </div>
+
+              <!-- 中文进度列表 -->
+              <div v-if="zhProgressList.length === 0" class="text-center op-40 py-16px text-13px">暂无物流进度</div>
+              <div v-for="(item, index) in zhProgressList" :key="index"
+                class="flex items-start gap-8px p-10px mb-6px rounded-6px"
+                :style="{ background: editingProgressIndex === index ? '#e8f4ff' : '#f9f9f9' }">
+                <div class="flex-1">
+                  <div class="text-11px op-50">{{ item.time }}</div>
+                  <div class="text-13px mt-2px">{{ item.desc }}</div>
+                </div>
+                <NButton size="tiny" quaternary @click="editProgress(index)">
+                  <SvgIcon icon="ph:pencil" class="text-14px" />
+                </NButton>
+                <NButton size="tiny" type="error" quaternary @click="removeProgress(index)">
+                  <SvgIcon icon="ph:trash" class="text-14px" />
+                </NButton>
+              </div>
+            </template>
+
+            <!-- 其他语言模式：显示中文进度（只读）+ 翻译输入框 -->
+            <template v-else>
+              <div v-if="zhProgressList.length === 0" class="text-center op-40 py-16px text-13px">请先在中文下添加物流进度</div>
+              <div v-for="(item, index) in zhProgressList" :key="index" class="p-10px mb-8px rounded-6px" style="background: #f9f9f9;">
+                <div class="text-11px op-50">{{ item.time }}</div>
+                <div class="text-13px mt-2px op-70">{{ item.desc }}</div>
+                <NInput
+                  :value="getTranslation(currentLang, index)"
+                  type="textarea"
+                  :rows="1"
+                  :placeholder="'输入' + (locales.find(l => l.code === currentLang)?.label || currentLang) + '翻译'"
+                  class="mt-6px"
+                  size="small"
+                  @update:value="(v: string) => setTranslation(currentLang, index, v)"
+                />
+              </div>
+            </template>
           </div>
         </NFormItem>
       </NForm>

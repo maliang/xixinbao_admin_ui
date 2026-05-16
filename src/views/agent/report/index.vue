@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { NCard, NButton, NInput, NSelect, NPagination, NDataTable } from 'naive-ui';
 import { fetchAgentReportSummary, fetchAgentReport } from '@/service/api';
 import { useAuthStore } from '@/store/modules/auth';
+import { $t } from '@/locales';
 defineOptions({ name: 'AgentReportPage' });
 
 const authStore = useAuthStore();
@@ -45,20 +46,20 @@ const reportData = ref<any[]>([]);
 
 // 管理员视角的表格列
 const adminColumns = [
-  { title: '数据月份', key: 'month', width: 120 },
-  { title: '代理账号/姓名', key: 'account', width: 160, render: (row: any) => `${row.account || '-'}/${row.name || '-'}` },
-  { title: '团队业绩', key: 'teamAmount', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.teamAmount || 0) },
-  { title: '个人佣金', key: 'commission', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.commission || 0) },
-  { title: '直接下线数', key: 'subCount', width: 100, align: 'right' as const },
-  { title: '注册时间', key: 'createdAt', width: 140, render: (row: any) => row.agentCreatedAt || row.createdAt || '-' }
+  { title: $t('biz.agent.report.dataMonth'), key: 'month', width: 120 },
+  { title: $t('biz.agent.report.agentAccount'), key: 'account', width: 160, render: (row: any) => `${row.account || '-'}/${row.name || '-'}` },
+  { title: $t('biz.agent.report.teamPerformance'), key: 'teamAmount', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.teamAmount || 0) },
+  { title: $t('biz.agent.report.personalCommission'), key: 'commission', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.commission || 0) },
+  { title: $t('biz.agent.report.subCount'), key: 'subCount', width: 100, align: 'right' as const },
+  { title: $t('biz.common.registerTime'), key: 'createdAt', width: 140, render: (row: any) => row.agentCreatedAt || row.createdAt || '-' }
 ];
 
 // 代理视角的表格列
 const agentColumns = [
-  { title: '数据月份', key: 'month', width: 120 },
-  { title: '下线账号/姓名', key: 'account', width: 160, render: (row: any) => `${row.account || '-'}/${row.name || '-'}` },
-  { title: '下线业绩', key: 'teamAmount', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.teamAmount || 0) },
-  { title: '注册时间', key: 'createdAt', width: 140, render: (row: any) => row.agentCreatedAt || row.createdAt || '-' }
+  { title: $t('biz.agent.report.dataMonth'), key: 'month', width: 120 },
+  { title: $t('biz.agent.report.subAccount'), key: 'account', width: 160, render: (row: any) => `${row.account || '-'}/${row.name || '-'}` },
+  { title: $t('biz.agent.report.subPerformance'), key: 'teamAmount', width: 120, align: 'right' as const, render: (row: any) => formatNumber(row.teamAmount || 0) },
+  { title: $t('biz.common.registerTime'), key: 'createdAt', width: 140, render: (row: any) => row.agentCreatedAt || row.createdAt || '-' }
 ];
 
 const columns = computed(() => isAgent.value ? agentColumns : adminColumns);
@@ -106,49 +107,49 @@ onMounted(() => { loadSummary(); loadData(); });
     <NCard :bordered="false" class="card-wrapper">
       <!-- 标题栏 -->
       <div class="flex items-center justify-between mb-20px">
-        <h3 class="text-18px font-bold">代理报表</h3>
+        <h3 class="text-18px font-bold">{{ $t('biz.agent.report.title') }}</h3>
         <NButton quaternary>
           <SvgIcon icon="ph:magnifying-glass" class="mr-4px" />
-          筛选
+          {{ $t('biz.common.filterConditions') }}
         </NButton>
       </div>
 
       <!-- 筛选条件 -->
       <div class="flex items-center gap-12px mb-20px flex-wrap">
         <div class="flex-1 max-w-280px">
-          <div class="text-12px op-50 mb-4px">月份</div>
+          <div class="text-12px op-50 mb-4px">{{ $t('biz.agent.report.month') }}</div>
           <NSelect v-model:value="monthFilter" :options="monthOptions" size="small" />
         </div>
         <div class="flex-1 max-w-320px">
-          <div class="text-12px op-50 mb-4px">{{ isAgent ? '下线账号/姓名' : '代理账号/姓名' }}</div>
-          <NInput v-model:value="keyword" :placeholder="isAgent ? '请输入下线账号或姓名' : '请输入代理账号或姓名'" clearable size="small">
+          <div class="text-12px op-50 mb-4px">{{ isAgent ? $t('biz.agent.report.keywordAgent') : $t('biz.agent.report.keyword') }}</div>
+          <NInput v-model:value="keyword" :placeholder="isAgent ? $t('biz.agent.report.keywordAgent') : $t('biz.agent.report.keyword')" clearable size="small">
             <template #suffix><SvgIcon icon="ph:magnifying-glass" class="op-40" /></template>
           </NInput>
         </div>
         <div class="flex items-end gap-8px pt-18px">
-          <NButton size="small" @click="handleReset">重置</NButton>
-          <NButton type="primary" size="small" @click="handleSearch">查询</NButton>
+          <NButton size="small" @click="handleReset">{{ $t('common.reset') }}</NButton>
+          <NButton type="primary" size="small" @click="handleSearch">{{ $t('common.search') }}</NButton>
         </div>
       </div>
 
       <!-- 统计卡片 -->
       <div class="grid grid-cols-3 gap-16px mb-24px">
         <div class="stat-card">
-          <div class="stat-label">{{ isAgent ? '直接下线数' : '总代理数' }}</div>
+          <div class="stat-label">{{ isAgent ? $t('biz.agent.report.subCount') : $t('biz.agent.report.totalAgents') }}</div>
           <div class="stat-row">
             <span class="stat-value text-primary">{{ formatNumber(summaryData.totalAgents) }}</span>
             <span class="stat-period">({{ monthFilter }})</span>
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">总业绩</div>
+          <div class="stat-label">{{ $t('biz.agent.report.totalPerformance') }}</div>
           <div class="stat-row">
             <span class="stat-value text-orange-500">{{ formatNumber(summaryData.totalPerformance) }}</span>
             <span class="stat-period">({{ monthFilter }})</span>
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">{{ isAgent ? '个人佣金' : '本月新增代理' }}</div>
+          <div class="stat-label">{{ isAgent ? $t('biz.agent.report.personalCommission') : $t('biz.agent.report.newAgents') }}</div>
           <div class="stat-row">
             <span class="stat-value text-primary">{{ formatNumber(summaryData.newAgents) }}</span>
             <span class="stat-period">({{ monthFilter }})</span>

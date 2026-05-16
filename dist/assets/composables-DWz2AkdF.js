@@ -1,1 +1,0 @@
-import{j as e}from"./vue.runtime.esm-bundler-CNzWOCQx.js";import{Xa as t,ei as n}from"./router-Bd8KHjhA.js";function r(){let r=e(n,null);return r===null&&t(`use-dialog`,`No outer <n-dialog-provider /> founded.`),r}export{r as t};

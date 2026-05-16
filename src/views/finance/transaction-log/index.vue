@@ -10,7 +10,7 @@ import { fetchTransactions } from '@/service/api';
 defineOptions({ name: 'FinanceTransactionLogPage' });
 
 const searchForm = ref({
-  keyword: '', type: '' as string,
+  keyword: '', type: '' as string, currency: '' as string,
   dateStart: null as number | null, dateEnd: null as number | null
 });
 const typeOptions = [
@@ -22,10 +22,16 @@ const typeOptions = [
   { label: '团队奖励', value: 'team_reward' },
   { label: '系统调整', value: 'system_adjust' },
   { label: '签到奖励', value: 'checkin' },
-  { label: '转盘抽奖', value: 'lottery_reward' }
+  { label: '转盘抽奖', value: 'lottery_reward' },
+  { label: '积分兑换', value: 'exchange' }
+];
+const currencyOptions = [
+  { label: '全部', value: '' },
+  { label: '余额', value: 'balance' },
+  { label: '积分', value: 'points' }
 ];
 function handleReset() {
-  searchForm.value = { keyword: '', type: '', dateStart: null, dateEnd: null };
+  searchForm.value = { keyword: '', type: '', currency: '', dateStart: null, dateEnd: null };
   currentPage.value = 1;
   loadData();
 }
@@ -52,7 +58,8 @@ const records = ref<LogRecord[]>([]);
 
 const typeLabels: Record<string, string> = {
   recharge: '充值到账', withdraw: '提现', invest: '投资', profit: '收益',
-  team_reward: '团队奖励', system_adjust: '系统调整', checkin: '签到奖励', lottery_reward: '转盘抽奖'
+  team_reward: '团队奖励', system_adjust: '系统调整', checkin: '签到奖励', lottery_reward: '转盘抽奖',
+  exchange: '积分兑换'
 };
 
 const columns: DataTableColumns = [
@@ -64,25 +71,41 @@ const columns: DataTableColumns = [
     ])
   },
   {
+    title: '币种', key: 'currency', width: 70, align: 'center' as const,
+    render: (row: any) => {
+      const isPoints = row.currency === 'points';
+      return h('span', { style: `font-size:12px;padding:1px 8px;border-radius:3px;${isPoints ? 'background:#fff7e6;color:#f0a020;' : 'background:#e8f4ff;color:#2080f0;'}` }, { default: () => isPoints ? '积分' : '余额' });
+    }
+  },
+  {
     title: '交易类型', key: 'type', width: 100,
     render: (row: any) => h('span', {}, { default: () => typeLabels[row.type] || row.type || '-' })
   },
   {
-    title: '变动前金额', key: 'balanceBefore', width: 110,
-    render: (row: any) => h('span', {}, { default: () => '¥' + parseFloat(row.balanceBefore || 0).toFixed(2) })
+    title: '变动前', key: 'balanceBefore', width: 110,
+    render: (row: any) => {
+      const isPoints = row.currency === 'points';
+      const val = parseFloat(row.balanceBefore || 0);
+      return h('span', {}, { default: () => isPoints ? val.toFixed(0) : '¥' + val.toFixed(2) });
+    }
   },
   {
-    title: '交易金额', key: 'amount', width: 100,
+    title: '变动金额', key: 'amount', width: 100,
     render: (row: any) => {
       const amt = parseFloat(row.amount || 0);
       const color = amt >= 0 ? '#18a058' : '#d03050';
       const prefix = amt >= 0 ? '+' : '';
-      return h('span', { style: `font-weight:bold;color:${color};` }, { default: () => prefix + '¥' + amt.toFixed(2) });
+      const isPoints = row.currency === 'points';
+      return h('span', { style: `font-weight:bold;color:${color};` }, { default: () => prefix + (isPoints ? amt.toFixed(0) : '¥' + amt.toFixed(2)) });
     }
   },
   {
-    title: '变动后金额', key: 'balanceAfter', width: 110,
-    render: (row: any) => h('span', { style: 'font-weight:bold;' }, { default: () => '¥' + parseFloat(row.balanceAfter || 0).toFixed(2) })
+    title: '变动后', key: 'balanceAfter', width: 110,
+    render: (row: any) => {
+      const isPoints = row.currency === 'points';
+      const val = parseFloat(row.balanceAfter || 0);
+      return h('span', { style: 'font-weight:bold;' }, { default: () => isPoints ? val.toFixed(0) : '¥' + val.toFixed(2) });
+    }
   },
   { title: '流水时间', key: 'createdAt', width: 170 },
   { title: '详情说明', key: 'description', minWidth: 120, ellipsis: { tooltip: true } }
@@ -96,6 +119,7 @@ async function loadData() {
   const params: Record<string, any> = { page: currentPage.value, page_size: pageSize };
   if (searchForm.value.keyword) params.keyword = searchForm.value.keyword;
   if (searchForm.value.type) params.type = searchForm.value.type;
+  if (searchForm.value.currency) params.currency = searchForm.value.currency;
   if (searchForm.value.dateStart) params.dateStart = toLocalDateStr(searchForm.value.dateStart);
   if (searchForm.value.dateEnd) params.dateEnd = toLocalDateStr(searchForm.value.dateEnd);
 
@@ -116,6 +140,7 @@ onMounted(() => { loadData(); });
         <NCollapseItem title="筛选条件" name="filter">
           <div class="flex items-end gap-16px flex-wrap">
             <div><div class="text-13px mb-6px">账号/姓名</div><NInput v-model:value="searchForm.keyword" placeholder="输入账号或姓名" class="w-220px" /></div>
+            <div><div class="text-13px mb-6px">币种</div><NSelect v-model:value="searchForm.currency" :options="currencyOptions" placeholder="全部" class="w-120px" /></div>
             <div><div class="text-13px mb-6px">交易类型</div><NSelect v-model:value="searchForm.type" :options="typeOptions" placeholder="全部类型" class="w-200px" /></div>
             <div>
               <div class="text-13px mb-6px">时间范围</div>
