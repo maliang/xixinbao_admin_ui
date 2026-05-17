@@ -423,7 +423,7 @@ onMounted(() => {
 
           <!-- 交易收益 -->
           <div class="text-center flex-1">
-            <div class="text-11px op-50">交易收益</div>
+            <div class="text-11px op-50">{{ $t('biz.project.list.profitRate') }}</div>
             <div class="text-15px font-bold text-primary">{{ p.profitRate ?? '-' }}%</div>
           </div>
 
@@ -569,8 +569,8 @@ onMounted(() => {
 
           <NGrid :x-gap="16" :y-gap="0" :cols="2">
             <NGridItem>
-              <NFormItem label="交易收益(%)">
-                <NInputNumber v-model:value="formData.profitRate" placeholder="请输入交易收益" class="w-full" />
+              <NFormItem :label="$t('biz.project.list.profitRate') + '(%)'">
+                <NInputNumber v-model:value="formData.profitRate" :placeholder="$t('biz.project.list.profitRate')" class="w-full" />
               </NFormItem>
             </NGridItem>
           </NGrid>

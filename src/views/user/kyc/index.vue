@@ -128,7 +128,7 @@ const columns = computed<DataTableColumns>(() => [
       if (row.kycStatus === 1) {
         return authStore.hasPermission('user.kyc.audit') ? h(NButton, { text: true, type: 'primary', onClick: () => openReview(row) }, () => $t('biz.user.kyc.review')) : null;
       }
-      return h(NSpace, { size: 8 }, () => [
+      return h(NSpace, { size: 8, justify: 'center' }, () => [
         h(NButton, { text: true, type: 'primary', onClick: () => openView(row) }, () => $t('common.view')),
         h(NButton, { text: true, type: 'error', onClick: () => handleDelete(row) }, () => $t('common.delete'))
       ]);

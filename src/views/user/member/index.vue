@@ -108,8 +108,14 @@ async function openEdit(m: any) {
       editForm.value.idNumber = data.idCardNumber || data.id_card_number || editForm.value.idNumber;
     }
     const wallets = data.wallets || [];
-    bankWallets.value = wallets.filter((w: any) => w.walletTypeId && !w.coinType);
-    cryptoWallets.value = wallets.filter((w: any) => w.coinType);
+    bankWallets.value = wallets.filter((w: any) => {
+      const channelType = w.walletType?.type || w.wallet_type?.type || '';
+      return channelType !== 'crypto';
+    });
+    cryptoWallets.value = wallets.filter((w: any) => {
+      const channelType = w.walletType?.type || w.wallet_type?.type || '';
+      return channelType === 'crypto';
+    });
   }
 }
 
@@ -249,8 +255,14 @@ async function handleUnbindWallet(walletId: number) {
       const { data } = await fetchUser(editingMemberId.value);
       if (data) {
         const wallets = data.wallets || [];
-        bankWallets.value = wallets.filter((w: any) => w.walletTypeId && !w.coinType);
-        cryptoWallets.value = wallets.filter((w: any) => w.coinType);
+        bankWallets.value = wallets.filter((w: any) => {
+          const channelType = w.walletType?.type || w.wallet_type?.type || '';
+          return channelType !== 'crypto';
+        });
+        cryptoWallets.value = wallets.filter((w: any) => {
+          const channelType = w.walletType?.type || w.wallet_type?.type || '';
+          return channelType === 'crypto';
+        });
       }
     }
   }
@@ -280,6 +292,27 @@ function openCreateUser() {
   editForm.value = { account: '', balance: '0', levelId: null, name: '', phone: '', idNumber: '', withdrawFee: 1, credit: 100, loginPwd: '', payPwd: '', remark: '' };
   editTab.value = 'basic';
   editVisible.value = true;
+}
+
+// ========== 复制文本 ==========
+function copyText(text: string) {
+  if (!text) return;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      window.$message?.success($t('biz.common.operateSuccess'));
+    });
+  } else {
+    // 兼容非 HTTPS 环境
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    window.$message?.success($t('biz.common.operateSuccess'));
+  }
 }
 
 // ========== 批量删除 ==========
@@ -472,7 +505,7 @@ function handleBatchDelete() {
                     <NGridItem><NFormItem :label="$t('biz.user.wallet.bankName')" :show-feedback="false"><NInput :value="w.bankName || '-'" disabled /></NFormItem></NGridItem>
                     <NGridItem><NFormItem :label="$t('biz.user.wallet.accountNumber')" :show-feedback="false"><NInput :value="w.accountNumber || '-'" disabled /></NFormItem></NGridItem>
                     <NGridItem><NFormItem :label="$t('biz.user.wallet.accountName')" :show-feedback="false"><NInput :value="w.accountName || '-'" disabled /></NFormItem></NGridItem>
-                    <NGridItem><NFormItem label="" :show-feedback="false"><NInput :value="w.branchName || '-'" disabled /></NFormItem></NGridItem>
+                    <NGridItem><NFormItem :label="$t('biz.user.wallet.branchName')" :show-feedback="false"><NInput :value="w.branchName || '-'" disabled /></NFormItem></NGridItem>
                   </NGrid>
                   <div class="flex justify-end mt-12px"><NButton size="small" type="error" ghost @click="handleUnbindWallet(w.id)"><SvgIcon icon="ph:link-break" class="mr-2px" />{{ $t('biz.user.member.unbind') }}</NButton></div>
                 </NCard>
@@ -481,9 +514,9 @@ function handleBatchDelete() {
                 <div v-if="cryptoWallets.length === 0" class="text-center op-40 py-24px">{{ $t('biz.common.noData') }}</div>
                 <NCard v-for="w in cryptoWallets" :key="w.id" :bordered="false" class="mb-12px" content-style="padding: 16px;">
                   <div class="flex items-end gap-12px">
-                    <NFormItem :label="$t('biz.user.wallet.walletType')" :show-feedback="false" class="w-120px"><NInput :value="w.coinType || '-'" disabled /></NFormItem>
-                    <NFormItem :label="$t('biz.user.wallet.accountNumber')" :show-feedback="false" class="flex-1"><NInput :value="w.accountNumber || '-'" disabled /></NFormItem>
-                    <NButton size="small" quaternary @click="() => { navigator.clipboard.writeText(w.accountNumber || ''); window.$message?.success($t('biz.common.operateSuccess')); }"><SvgIcon icon="ph:copy" class="mr-2px" />{{ $t('common.copy') }}</NButton>
+                    <NFormItem :label="$t('biz.user.wallet.walletType')" :show-feedback="false" class="w-120px"><NInput :value="w.walletType?.name || w.wallet_type?.name || '-'" disabled /></NFormItem>
+                    <NFormItem :label="$t('biz.user.wallet.walletAddress')" :show-feedback="false" class="flex-1"><NInput :value="w.accountNumber || '-'" disabled /></NFormItem>
+                    <NButton size="small" quaternary @click="copyText(w.accountNumber || '')"><SvgIcon icon="ph:copy" class="mr-2px" />{{ $t('common.copy') }}</NButton>
                     <NButton size="small" type="error" ghost @click="handleUnbindWallet(w.id)"><SvgIcon icon="ph:link-break" class="mr-2px" />{{ $t('biz.user.member.unbind') }}</NButton>
                   </div>
                 </NCard>

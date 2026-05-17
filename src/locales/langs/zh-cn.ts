@@ -14,6 +14,7 @@ const local: App.I18n.Schema = {
     batchDelete: '批量删除',
     cancel: '取消',
     close: '关闭',
+    copy: '复制',
     check: '勾选',
     selectAll: '全选',
     expandColumn: '展开列',
@@ -45,6 +46,7 @@ const local: App.I18n.Schema = {
     update: '更新',
     updateSuccess: '更新成功',
     userCenter: '个人中心',
+    view: '查看',
     yesOrNo: {
       yes: '是',
       no: '否'

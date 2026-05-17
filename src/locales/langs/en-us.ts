@@ -14,6 +14,7 @@ const local: App.I18n.Schema = {
     batchDelete: 'Batch Delete',
     cancel: 'Cancel',
     close: 'Close',
+    copy: 'Copy',
     check: 'Check',
     selectAll: 'Select All',
     expandColumn: 'Expand Column',
@@ -45,6 +46,7 @@ const local: App.I18n.Schema = {
     update: 'Update',
     updateSuccess: 'Update Success',
     userCenter: 'User Center',
+    view: 'View',
     yesOrNo: {
       yes: 'Yes',
       no: 'No'
