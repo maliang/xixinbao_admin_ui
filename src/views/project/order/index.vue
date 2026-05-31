@@ -57,7 +57,7 @@ const columns = [
     return h(NTag, { type: item.type as any, size: 'small', bordered: false }, () => item.label);
   }},
   { title: '投资金额', key: 'amount', width: 90, align: 'right' as const },
-  { title: '加入时间/下次返款', key: 'dateInfo', width: 140, render: (row: any) => h('div', { class: 'text-12px' }, [h('div', {}, row.startDate || '-'), h('div', { class: 'op-60' }, row.nextReturnDate || '-')]) },
+  { title: '加入时间/下次返款', key: 'dateInfo', width: 160, render: (row: any) => h('div', { class: 'text-12px' }, [h('div', {}, (row.startDate || '-').substring(0, 19)), h('div', { class: 'op-60' }, (row.nextReturnDate || '-').substring(0, 19))]) },
   { title: '领取次数', key: 'completedTimes', width: 70, align: 'center' as const, render: (row: any) => (row.completedTimes || 0) + '/' + (row.totalTimes || 0) },
   { title: '返款金额', key: 'returnAmount', width: 90, align: 'right' as const },
   { title: '复利金额', key: 'rebateAmount', width: 90, align: 'right' as const },

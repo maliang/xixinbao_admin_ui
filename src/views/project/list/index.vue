@@ -154,7 +154,10 @@ async function loadLevelOptions() {
   const { data, error } = await fetchLevels();
   if (!error && data) {
     const list = data.list || data || [];
-    memberLevelOptions.value = (Array.isArray(list) ? list : []).map((l: any) => ({ label: l.name, value: String(l.id) }));
+    memberLevelOptions.value = [
+      { label: $t('biz.common.all'), value: '' },
+      ...(Array.isArray(list) ? list : []).map((l: any) => ({ label: l.name, value: String(l.id) }))
+    ];
   }
 }
 
@@ -521,7 +524,8 @@ onMounted(() => {
             </NGridItem>
             <NGridItem>
               <NFormItem label="会员等级">
-                <NSelect v-model:value="formData.minLevelId" :options="memberLevelOptions" placeholder="选择会员等级" />
+                <NSelect v-model:value="formData.minLevelId" :options="memberLevelOptions" placeholder="不限等级" clearable />
+                <div class="text-11px op-50 mt-4px">选中某一等级表示此等级及以上的会员可以购买</div>
               </NFormItem>
             </NGridItem>
             <NGridItem>

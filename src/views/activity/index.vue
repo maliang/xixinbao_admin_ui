@@ -337,7 +337,7 @@ onMounted(() => { loadTypes(); loadData(); loadLocales(); });
       </div>
       <h3 class="text-16px font-bold mb-12px">{{ detailData.title }}</h3>
       <div v-if="detailData.typeName" class="text-12px op-50 mb-12px">类型：{{ detailData.typeName }}</div>
-      <div v-if="detailData.content" class="text-13px leading-relaxed" v-html="detailData.content"></div>
+      <div v-if="detailData.content" class="text-13px leading-relaxed" v-html="detailData.content.replace(/\n/g, '<br>')"></div>
       <div v-else class="text-13px op-40">暂无活动内容</div>
     </NModal>
   </div>

@@ -8,7 +8,8 @@ const form = ref({
   account_min_length: 4, account_max_length: 20,
   same_ip_limit: 1, ip_period: 'forever' as string,
   banned_names: 'test\nadmin\nroot\nsystem\nguest',
-  auto_logout: true, idle_timeout: 30
+  auto_logout: true, idle_timeout: 30,
+  franchise_require_kyc: true, kyc_hide_photos_after_approved: true
 });
 const periodOptions = ['永久', '每天', '每周', '每月'];
 
@@ -26,6 +27,8 @@ async function loadData() {
     form.value.banned_names = r.bannedNames || '';
     form.value.auto_logout = r.autoLogout === '1' || r.autoLogout === true;
     form.value.idle_timeout = Number(r.idleTimeout) || 30;
+    form.value.franchise_require_kyc = r.franchiseRequireKyc !== '0' && r.franchiseRequireKyc !== false;
+    form.value.kyc_hide_photos_after_approved = r.kycHidePhotosAfterApproved !== '0' && r.kycHidePhotosAfterApproved !== false;
   }
 }
 async function handleSave() {
@@ -130,6 +133,29 @@ loadData();
         <div class="flex items-center gap-8px">
           <NInputNumber v-model:value="form.idle_timeout" :show-button="false" size="small" class="w-100px" />
           <span class="text-13px op-50">分钟</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 实名与加盟 -->
+    <div class="section-title">实名与加盟</div>
+    <div class="grid grid-cols-2 gap-16px mb-24px">
+      <div class="config-card">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-500 text-14px">加盟是否必须实名</div>
+            <div class="text-12px op-50 mt-2px">开启后用户购买加盟项目前必须完成实名认证</div>
+          </div>
+          <NSwitch v-model:value="form.franchise_require_kyc" />
+        </div>
+      </div>
+      <div class="config-card">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-500 text-14px">实名审核后隐藏证件照片</div>
+            <div class="text-12px op-50 mt-2px">开启后用户实名通过后在前台不再显示证件照片</div>
+          </div>
+          <NSwitch v-model:value="form.kyc_hide_photos_after_approved" />
         </div>
       </div>
     </div>

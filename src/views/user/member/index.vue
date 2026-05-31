@@ -85,7 +85,7 @@ onMounted(() => { loadData(); loadLevelOptions(); });
 const editVisible = ref(false);
 const editTab = ref('basic');
 const editSubTab = ref('bank');
-const editForm = ref({ account: '', balance: '', levelId: null as number | null, name: '', phone: '', idNumber: '', withdrawFee: 1, credit: 100, loginPwd: '', payPwd: '', remark: '' });
+const editForm = ref({ account: '', balance: '', levelId: null as number | null, name: '', phone: '', idNumber: '', withdrawFee: 1, credit: 100, points: 0, loginPwd: '', payPwd: '', remark: '' });
 const editingMemberId = ref<number | null>(null);
 
 // 用户详情数据（证件照片、钱包等）
@@ -95,7 +95,7 @@ const cryptoWallets = ref<any[]>([]);
 
 async function openEdit(m: any) {
   editingMemberId.value = m.id;
-  editForm.value = { account: m.account, balance: String(m.balance || 0), levelId: m.levelId || null, name: m.name || '', phone: m.phone || '', idNumber: m.idCardNumber || m.id_card_number || '', withdrawFee: m.withdrawFeeRate || m.withdraw_fee_rate || 1, credit: m.creditScore || m.credit_score || 100, loginPwd: '', payPwd: '', remark: m.remark || '' };
+  editForm.value = { account: m.account, balance: String(m.balance || 0), levelId: m.levelId || null, name: m.name || '', phone: m.phone || '', idNumber: m.idCardNumber || m.id_card_number || '', withdrawFee: m.withdrawFeeRate || m.withdraw_fee_rate || 1, credit: m.creditScore || m.credit_score || 100, points: m.points || 0, loginPwd: '', payPwd: '', remark: m.remark || '' };
   editTab.value = 'basic';
   editVisible.value = true;
 
@@ -127,6 +127,7 @@ async function handleSaveEdit() {
     idCardNumber: editForm.value.idNumber,
     withdrawFeeRate: editForm.value.withdrawFee,
     creditScore: editForm.value.credit,
+    points: editForm.value.points,
     remark: editForm.value.remark,
   };
   if (editForm.value.loginPwd) payload.loginPassword = editForm.value.loginPwd;
@@ -289,7 +290,7 @@ async function handleDeleteMember(m: any) {
 // ========== 新增用户 ==========
 function openCreateUser() {
   editingMemberId.value = null;
-  editForm.value = { account: '', balance: '0', levelId: null, name: '', phone: '', idNumber: '', withdrawFee: 1, credit: 100, loginPwd: '', payPwd: '', remark: '' };
+  editForm.value = { account: '', balance: '0', levelId: null, name: '', phone: '', idNumber: '', withdrawFee: 1, credit: 100, points: 0, loginPwd: '', payPwd: '', remark: '' };
   editTab.value = 'basic';
   editVisible.value = true;
 }
@@ -471,6 +472,7 @@ function handleBatchDelete() {
                 <NGridItem><NFormItem :label="$t('biz.user.member.idNumber')" :show-feedback="false"><NInput v-model:value="editForm.idNumber" /></NFormItem></NGridItem>
                 <NGridItem><NFormItem :label="$t('biz.user.member.withdrawFee')" :show-feedback="false"><NInputNumber v-model:value="editForm.withdrawFee" :min="0" :max="100"><template #suffix>%</template></NInputNumber></NFormItem></NGridItem>
                 <NGridItem><NFormItem :label="$t('biz.user.member.creditScore')" :show-feedback="false"><NInputNumber v-model:value="editForm.credit" :min="0"><template #suffix>分</template></NInputNumber></NFormItem></NGridItem>
+                <NGridItem><NFormItem :label="$t('biz.user.member.points')" :show-feedback="false"><NInputNumber v-model:value="editForm.points" :min="0" class="w-full" /></NFormItem></NGridItem>
               </NGrid>
               <NGrid :x-gap="16" :y-gap="12" :cols="2" class="mt-12px">
                 <NGridItem><NFormItem :label="$t('biz.user.member.loginPassword')" :show-feedback="false"><NInput v-model:value="editForm.loginPwd" type="password" show-password-on="click" placeholder="********" /></NFormItem></NGridItem>

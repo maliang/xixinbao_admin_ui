@@ -8,6 +8,10 @@ import json5 from 'json5';
 export function createServiceConfig(env: Env.ImportMeta) {
   const { VITE_SERVICE_BASE_URL, VITE_OTHER_SERVICE_BASE_URL } = env;
 
+  // 运行时配置优先（来自 public/config.js，仅浏览器环境生效）
+  const runtimeConfig = typeof window !== 'undefined' ? (window as any).__APP_CONFIG__ || {} : {};
+  const baseURL = runtimeConfig.VITE_SERVICE_BASE_URL || VITE_SERVICE_BASE_URL;
+
   let other = {} as Record<App.Service.OtherBaseURLKey, string>;
   try {
     other = json5.parse(VITE_OTHER_SERVICE_BASE_URL);
@@ -17,7 +21,7 @@ export function createServiceConfig(env: Env.ImportMeta) {
   }
 
   const httpConfig: App.Service.SimpleServiceConfig = {
-    baseURL: VITE_SERVICE_BASE_URL,
+    baseURL,
     other
   };
 

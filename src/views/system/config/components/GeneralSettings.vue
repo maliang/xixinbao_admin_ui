@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NInput, NButton } from 'naive-ui';
+import { NInput, NButton, NSwitch } from 'naive-ui';
 import ImageUpload from '@/components/common/ImageUpload.vue';
 import { fetchSettings, saveSettings } from '@/service/api';
 
 const form = ref({
   site_name: '', site_title: '', app_download_url: '',
   company_name: '', company_seal: '',
-  front_logo: '', admin_logo: '', default_avatar: ''
+  front_logo: '', admin_logo: '', default_avatar: '',
+  splash_enabled: true, splash_image: ''
 });
 
 async function loadData() {
@@ -22,10 +23,17 @@ async function loadData() {
     form.value.front_logo = general.frontLogo || '';
     form.value.admin_logo = general.adminLogo || '';
     form.value.default_avatar = general.defaultAvatar || '';
+    form.value.splash_image = general.splashImage || '';
+    form.value.splash_enabled = general.splashEnabled !== '0' && general.splashEnabled !== false;
   }
 }
 async function handleSave() {
-  const items = Object.entries(form.value).map(([key, value]) => ({ group: 'general', key, value }));
+  const items = Object.entries(form.value).map(([key, value]) => {
+    let v: string;
+    if (typeof value === 'boolean') v = value ? '1' : '0';
+    else v = String(value ?? '');
+    return { group: 'general', key, value: v };
+  });
   const { error } = await saveSettings(items);
   if (!error) {
     // 清除站点配置缓存，下次加载时重新从接口获取
@@ -71,6 +79,23 @@ loadData();
         <div class="field-label mb-8px">默认用户头像</div>
         <ImageUpload v-model="form.default_avatar" width="100px" height="100px" />
       </div>
+    </div>
+
+    <!-- 启动图配置 -->
+    <h4 class="text-15px font-bold mb-16px">启动图配置</h4>
+    <div class="mb-24px">
+      <div class="flex items-center justify-between mb-12px">
+        <div>
+          <div class="font-500 text-14px">启用启动图</div>
+          <div class="text-12px op-50 mt-2px">关闭后移动端将跳过启动图直接进入应用</div>
+        </div>
+        <NSwitch v-model:value="form.splash_enabled" />
+      </div>
+      <template v-if="form.splash_enabled">
+        <div class="field-label mb-8px">移动端启动图（建议尺寸 750×1334）</div>
+        <ImageUpload v-model="form.splash_image" width="120px" height="213px" />
+        <div class="text-11px op-40 mt-6px">配置后移动端启动页将显示此图片，未配置则使用默认启动图</div>
+      </template>
     </div>
 
     <!-- 公司信息 -->

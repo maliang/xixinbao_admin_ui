@@ -39,6 +39,7 @@ const local: App.I18n.Schema = {
     pleaseCheckValue: '请检查输入的值是否合法',
     refresh: '刷新',
     reset: '重置',
+    save: '保存',
     search: '搜索',
     switch: '切换',
     tip: '提示',

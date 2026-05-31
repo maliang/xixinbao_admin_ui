@@ -98,7 +98,9 @@ const bizEnUS = {
         addLevel: 'Add Level',
         editLevel: 'Edit Level',
         levelName: 'Level Name',
+        dividendRate: 'Dividend Rate',
         investAmount: 'Investment Requirement',
+        dailySpinCount: 'Daily Spin Count',
         sort: 'Sort',
         description: 'Description'
       },

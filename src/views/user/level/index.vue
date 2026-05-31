@@ -17,9 +17,9 @@ const records = ref<any[]>([]);
 const columns: DataTableColumns = [
   { title: '#', key: 'index', width: 60, align: 'center', render: (_row, index) => index + 1 },
   { title: $t('biz.user.level.levelName'), key: 'name', width: 140 },
-  { title: $t('biz.user.level.investAmount'), key: 'dividendRate', width: 140, render: (row) => `${row.dividendRate}%` },
+  { title: $t('biz.user.level.dividendRate'), key: 'dividendRate', width: 140, render: (row) => `${row.dividendRate}%` },
   { title: $t('biz.user.level.investAmount'), key: 'investAmount', width: 140, render: (row) => `¥${Number(row.investAmount || 0).toLocaleString()}` },
-  { title: $t('biz.user.level.sort'), key: 'dailySpinCount', width: 140, render: (row) => `${row.dailySpinCount}` },
+  { title: $t('biz.user.level.dailySpinCount'), key: 'dailySpinCount', width: 140, render: (row) => `${row.dailySpinCount}` },
   {
     title: $t('common.action'), key: 'action', width: 100, align: 'right',
     render: (row) => h(NSpace, { size: 8, justify: 'end' }, () => [
@@ -123,8 +123,8 @@ function handleDelete(r: any) {
           <NInput v-model:value="formData.name" :placeholder="$t('biz.user.level.levelName')" />
         </div>
         <div>
-          <div class="text-13px font-500 mb-6px">{{ $t('biz.user.level.investAmount') }}</div>
-          <NInput v-model:value="formData.dividendRate" :placeholder="$t('biz.user.level.investAmount')">
+          <div class="text-13px font-500 mb-6px">{{ $t('biz.user.level.dividendRate') }}</div>
+          <NInput v-model:value="formData.dividendRate" :placeholder="$t('biz.user.level.dividendRate')">
             <template #suffix><span class="op-50">%</span></template>
           </NInput>
         </div>
@@ -135,8 +135,8 @@ function handleDelete(r: any) {
           </NInput>
         </div>
         <div>
-          <div class="text-13px font-500 mb-6px">{{ $t('biz.user.level.sort') }}</div>
-          <NInput v-model:value="formData.dailySpinCount" :placeholder="$t('biz.user.level.sort')">
+          <div class="text-13px font-500 mb-6px">{{ $t('biz.user.level.dailySpinCount') }}</div>
+          <NInput v-model:value="formData.dailySpinCount" :placeholder="$t('biz.user.level.dailySpinCount')">
           </NInput>
         </div>
       </div>

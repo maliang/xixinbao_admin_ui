@@ -7,13 +7,11 @@ const dialog = useDialog();
 
 // 筛选
 const channelTypeFilter = ref('all');
-const coinTypeFilter = ref('all');
-const bankTypeFilter = ref('all');
+const coinTypeFilter = ref('');
+const bankTypeFilter = ref('');
 const statusFilterVal = ref('all');
 const searchKeyword = ref('');
 const channelTypeOptions = [{ label: '全部通道类型', value: 'all' }, { label: '币种通道', value: 'crypto' }, { label: '银行卡通道', value: 'bank' }];
-const coinTypeOptions = [{ label: '全部币种', value: 'all' }, { label: 'BTC', value: 'BTC' }, { label: 'ETH', value: 'ETH' }, { label: 'USDT', value: 'USDT' }];
-const bankTypeOptions = [{ label: '全部银行', value: 'all' }, { label: '工商银行', value: 'ICBC' }, { label: '建设银行', value: 'CCB' }];
 const statusOpts = [{ label: '全部状态', value: 'all' }, { label: '启用', value: 'enabled' }, { label: '停用', value: 'disabled' }, { label: '维护中', value: 'maintenance' }];
 
 // 列表
@@ -23,8 +21,8 @@ const totalRecords = ref(0);
 function loadData() {
   fetchPayChannels({
     type: channelTypeFilter.value === 'all' ? undefined : channelTypeFilter.value,
-    coinType: coinTypeFilter.value === 'all' ? undefined : coinTypeFilter.value,
-    bankType: bankTypeFilter.value === 'all' ? undefined : bankTypeFilter.value,
+    coinType: coinTypeFilter.value || undefined,
+    bankType: bankTypeFilter.value || undefined,
     status: statusFilterVal.value === 'all' ? undefined : statusFilterVal.value,
     keyword: searchKeyword.value || undefined,
     page: currentPage.value,
@@ -37,7 +35,7 @@ function loadData() {
   });
 }
 function handleSearch() { currentPage.value = 1; loadData(); }
-function handleReset() { channelTypeFilter.value = 'all'; coinTypeFilter.value = 'all'; bankTypeFilter.value = 'all'; statusFilterVal.value = 'all'; searchKeyword.value = ''; handleSearch(); }
+function handleReset() { channelTypeFilter.value = 'all'; coinTypeFilter.value = ''; bankTypeFilter.value = ''; statusFilterVal.value = 'all'; searchKeyword.value = ''; handleSearch(); }
 
 // 添加通道弹窗
 const addVisible = ref(false);
@@ -108,8 +106,8 @@ loadData();
     <div class="mb-16px">
       <div class="grid grid-cols-4 gap-12px mb-12px">
         <div><div class="field-label">通道类型</div><NSelect v-model:value="channelTypeFilter" :options="channelTypeOptions" size="small" /></div>
-        <div><div class="field-label">币种类型</div><NSelect v-model:value="coinTypeFilter" :options="coinTypeOptions" size="small" /></div>
-        <div><div class="field-label">银行类型</div><NSelect v-model:value="bankTypeFilter" :options="bankTypeOptions" size="small" /></div>
+        <div><div class="field-label">币种类型</div><NInput v-model:value="coinTypeFilter" placeholder="输入币种筛选" clearable size="small" /></div>
+        <div><div class="field-label">银行类型</div><NInput v-model:value="bankTypeFilter" placeholder="输入银行筛选" clearable size="small" /></div>
         <div><div class="field-label">操作状态</div><NSelect v-model:value="statusFilterVal" :options="statusOpts" size="small" /></div>
       </div>
       <div class="flex items-center gap-8px">

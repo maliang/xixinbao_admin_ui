@@ -100,7 +100,9 @@ const bizZhCN = {
         addLevel: '新增等级',
         editLevel: '编辑等级',
         levelName: '等级名称',
+        dividendRate: '分红比例',
         investAmount: '投资金额要求',
+        dailySpinCount: '每日转盘次数',
         sort: '排序',
         description: '描述'
       },
