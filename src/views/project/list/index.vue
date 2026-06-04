@@ -8,6 +8,7 @@ import {
 import { fetchProjects, createProject, updateProject, deleteProject, toggleProject, fetchProjectCategories, fetchGuarantors, fetchLevels, fetchProject } from '@/service/api';
 import ImageUpload from '@/components/common/ImageUpload.vue';
 import { useLanguageEditor } from '@/hooks/business/useLanguageEditor';
+import { $t } from '@/locales';
 
 defineOptions({ name: 'ProjectListPage' });
 
@@ -415,12 +416,12 @@ onMounted(() => {
             <div class="text-16px font-bold">{{ p.scale ? (p.scale / 10000) : '-' }}</div>
           </div>
 
-          <!-- 进度 -->
+          <!-- 进度（实时计算：auto_progress时每日+progress×100） -->
           <div class="text-center flex-1">
             <div class="text-11px op-50">进度</div>
             <div class="flex items-center justify-center gap-4px mt-4px">
-              <NProgress :percentage="p.progress || 0" :show-indicator="false" :height="6" style="width: 40px;" />
-              <span class="text-13px font-medium text-primary">{{ p.progress ?? 0 }}%</span>
+              <NProgress :percentage="p.virtualProgress ?? 0" :show-indicator="false" :height="6" style="width: 40px;" />
+              <span class="text-13px font-medium text-primary">{{ p.virtualProgress ?? 0 }}%</span>
             </div>
           </div>
 
@@ -529,8 +530,9 @@ onMounted(() => {
               </NFormItem>
             </NGridItem>
             <NGridItem>
-              <NFormItem label="投资人数">
-                <NInputNumber v-model:value="formData.investorCount" placeholder="请输入投资人数" class="w-full" />
+              <NFormItem label="最大投资人数(人)">
+                <NInputNumber v-model:value="formData.investorCount" placeholder="0=不限制" class="w-full" />
+                <div class="text-11px op-50 mt-4px">0=不限制，实际人数实时统计</div>
               </NFormItem>
             </NGridItem>
             <NGridItem>
@@ -582,14 +584,16 @@ onMounted(() => {
           <NFormItem label="可投金额提示">
             <NInput v-model:value="formData.amountTip" placeholder="例如：投资期间只要产品未设置，投资者均可自由投资。" />
           </NFormItem>
-          <NFormItem label="投资进度(%)">
-            <NInputNumber v-model:value="formData.progress" placeholder="请输入投资进度(支持两位小数)" class="w-full" />
+          <NFormItem label="投资进度配置">
+            <NInputNumber v-model:value="formData.progress" placeholder="例：0.02" class="w-full" />
+            <div class="text-11px op-50 mt-4px">设置项目默认的虚拟投资进度，开启自动增长后每天增长 progress×100（如0.02→每天增长2%）</div>
           </NFormItem>
           <NFormItem label="自动进度增长">
             <NRadioGroup v-model:value="formData.autoProgress">
               <NRadio :value="false">关闭</NRadio>
               <NRadio :value="true">开启</NRadio>
             </NRadioGroup>
+            <div class="text-11px op-50 mt-4px">开启后每天自动增加 progress×100 进度（如设0.02则每天增2%），到达100%停止</div>
           </NFormItem>
           <NFormItem label="收益资金倍数">
             <NInputNumber v-model:value="formData.returnMultiple" placeholder="请输入资金倍数" class="w-full" />
