@@ -416,7 +416,7 @@ onMounted(() => {
             <div class="text-16px font-bold">{{ p.scale ? (p.scale / 10000) : '-' }}</div>
           </div>
 
-          <!-- 进度（实时计算：auto_progress时每日+progress×100） -->
+          <!-- 进度（实时计算：auto_progress时每日+同值） -->
           <div class="text-center flex-1">
             <div class="text-11px op-50">进度</div>
             <div class="flex items-center justify-center gap-4px mt-4px">
@@ -586,14 +586,14 @@ onMounted(() => {
           </NFormItem>
           <NFormItem label="投资进度配置">
             <NInputNumber v-model:value="formData.progress" placeholder="例：0.02" class="w-full" />
-            <div class="text-11px op-50 mt-4px">设置项目默认的虚拟投资进度，开启自动增长后每天增长 progress×100（如0.02→每天增长2%）</div>
+            <div class="text-11px op-50 mt-4px">设置项目默认的虚拟投资进度（%），开启自动增长后每天增长相同的数值（如设10则每天+10%）</div>
           </NFormItem>
           <NFormItem label="自动进度增长">
             <NRadioGroup v-model:value="formData.autoProgress">
               <NRadio :value="false">关闭</NRadio>
               <NRadio :value="true">开启</NRadio>
             </NRadioGroup>
-            <div class="text-11px op-50 mt-4px">开启后每天自动增加 progress×100 进度（如设0.02则每天增2%），到达100%停止</div>
+            <div class="text-11px op-50 mt-4px">开启后每天自动增加与进度配置同等的百分比，到达100%停止</div>
           </NFormItem>
           <NFormItem label="收益资金倍数">
             <NInputNumber v-model:value="formData.returnMultiple" placeholder="请输入资金倍数" class="w-full" />
