@@ -1,17 +1,41 @@
 <script setup lang="ts">
 import { ref, h, onMounted } from 'vue';
-import { NCard, NButton, NInput, NModal, NSpace, NDataTable, useDialog } from 'naive-ui';
+import { NCard, NButton, NInput, NModal, NSpace, NDataTable, NRadioGroup, NRadio, useDialog, useMessage } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
-import { fetchLevels, createLevel, updateLevel, deleteLevel } from '@/service/api';
+import { fetchLevels, createLevel, updateLevel, deleteLevel, fetchSettings, saveSettings } from '@/service/api';
 import { useAuthStore } from '@/store/modules/auth';
 import { $t } from '@/locales';
 
 defineOptions({ name: 'UserLevelPage' });
 const dialog = useDialog();
+const message = useMessage();
 const authStore = useAuthStore();
 
 const loading = ref(false);
 const records = ref<any[]>([]);
+
+// ========== 升级模式 ==========
+const upgradeMode = ref('auto');
+
+async function loadUpgradeMode() {
+  const { data, error } = await fetchSettings();
+  if (!error && data) {
+    const settings = data.list || data || [];
+    const map: Record<string, string> = {};
+    (Array.isArray(settings) ? settings : []).forEach((s: any) => { map[s.key] = s.value; });
+    upgradeMode.value = map['level_upgrade_mode'] || 'auto';
+  }
+}
+
+async function handleUpgradeModeChange(val: string) {
+  const { error } = await saveSettings([{ key: 'level_upgrade_mode', value: val }]);
+  if (!error) {
+    upgradeMode.value = val;
+    message.success('升级模式已更新');
+  } else {
+    message.error(error?.msg || '保存失败');
+  }
+}
 
 // ========== 表格列定义 ==========
 const columns: DataTableColumns = [
@@ -39,7 +63,7 @@ async function loadData() {
   }
 }
 
-onMounted(() => { loadData(); });
+onMounted(() => { loadData(); loadUpgradeMode(); });
 
 // ========== 添加/编辑弹窗 ==========
 const modalVisible = ref(false);
@@ -104,6 +128,20 @@ function handleDelete(r: any) {
       <h2 class="text-18px font-bold m-0">{{ $t('biz.user.level.title') }}</h2>
       <NButton v-permission="'user.level.create'" type="primary" @click="openAdd">{{ $t('biz.user.level.addLevel') }}</NButton>
     </div>
+
+    <!-- 升级模式设置 -->
+    <NCard :bordered="false" class="card-wrapper mb-16px" size="small">
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-14px font-500">会员等级升级模式：</span>
+          <NRadioGroup :value="upgradeMode" @update:value="handleUpgradeModeChange">
+            <NRadio value="auto" class="ml-12px">自动升级</NRadio>
+            <NRadio value="manual" class="ml-12px">手动升级</NRadio>
+          </NRadioGroup>
+        </div>
+        <div class="text-12px op-50">自动时用户累计投资达标自动升级；手动时需管理员手动调整</div>
+      </div>
+    </NCard>
 
     <NCard :bordered="false" class="card-wrapper">
       <NDataTable

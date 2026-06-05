@@ -62,6 +62,7 @@ const columns = [
   { title: '返款金额', key: 'returnAmount', width: 90, align: 'right' as const },
   { title: '复利金额', key: 'rebateAmount', width: 90, align: 'right' as const },
   { title: '会员奖励', key: 'rewardAmount', width: 90, align: 'right' as const },
+  { title: '分红金额', key: 'dividendAmount', width: 90, align: 'right' as const },
   { title: '投资前/后余额', key: 'balanceInfo', width: 100, render: (row: any) => h('div', { class: 'text-12px' }, [h('div', {}, row.balanceBefore ?? '-'), h('div', { class: 'op-60' }, row.balanceAfter ?? '-')]) },
   {
     title: '操作', key: 'action', width: 120, fixed: 'right' as const,
