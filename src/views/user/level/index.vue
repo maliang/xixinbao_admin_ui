@@ -20,15 +20,19 @@ const upgradeMode = ref('auto');
 async function loadUpgradeMode() {
   const { data, error } = await fetchSettings();
   if (!error && data) {
-    const settings = data.list || data || [];
-    const map: Record<string, string> = {};
-    (Array.isArray(settings) ? settings : []).forEach((s: any) => { map[s.key] = s.value; });
-    upgradeMode.value = map['level_upgrade_mode'] || 'auto';
+    // 后端返回按分组嵌套: { general:{...}, memberLevel:{levelUpgradeMode:'manual'} }
+    // 注意：axios 拦截器已将蛇形键转为驼峰
+    for (const group of Object.values(data)) {
+      if (group && typeof group === 'object' && 'levelUpgradeMode' in group) {
+        upgradeMode.value = group.levelUpgradeMode;
+        return;
+      }
+    }
   }
 }
 
 async function handleUpgradeModeChange(val: string) {
-  const { error } = await saveSettings([{ key: 'level_upgrade_mode', value: val }]);
+  const { error } = await saveSettings([{ group: 'member_level', key: 'level_upgrade_mode', value: val }]);
   if (!error) {
     upgradeMode.value = val;
     message.success('升级模式已更新');
