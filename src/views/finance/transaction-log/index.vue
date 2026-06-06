@@ -21,6 +21,7 @@ const typeOptions = [
   { label: '收益', value: 'profit' },
   { label: '团队奖励', value: 'team_reward' },
   { label: '系统调整', value: 'system_adjust' },
+  { label: '项目分红', value: 'dividend' },
   { label: '签到奖励', value: 'checkin' },
   { label: '转盘抽奖', value: 'lottery_reward' },
   { label: '积分兑换', value: 'exchange' }
@@ -59,7 +60,7 @@ const records = ref<LogRecord[]>([]);
 const typeLabels: Record<string, string> = {
   recharge: '充值到账', withdraw: '提现', invest: '投资', profit: '收益',
   team_reward: '团队奖励', system_adjust: '系统调整', checkin: '签到奖励', lottery_reward: '转盘抽奖',
-  exchange: '积分兑换'
+  exchange: '积分兑换', dividend: '项目分红'
 };
 
 const columns: DataTableColumns = [
