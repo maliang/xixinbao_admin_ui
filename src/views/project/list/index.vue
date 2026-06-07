@@ -642,6 +642,7 @@ onMounted(() => {
           </NFormItem>
           <NFormItem label="发布时间">
             <NDatePicker v-model:value="formData.publishedAt" type="date" class="w-full" />
+            <div class="text-11px op-50 mt-4px">填写发布日期，分红才有效（published_at + 期限 = 到期时间，到期后自动分红）</div>
           </NFormItem>
           <NFormItem label="产品图片">
             <ImageUpload v-model="formData.image" />
