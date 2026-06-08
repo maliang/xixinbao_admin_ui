@@ -416,12 +416,12 @@ onMounted(() => {
             <div class="text-16px font-bold">{{ p.scale ? (p.scale / 10000) : '-' }}</div>
           </div>
 
-          <!-- 进度（实时计算：auto_progress时每日+同值） -->
+          <!-- 进度（实际已投金额/项目规模） -->
           <div class="text-center flex-1">
             <div class="text-11px op-50">进度</div>
             <div class="flex items-center justify-center gap-4px mt-4px">
-              <NProgress :percentage="p.virtualProgress ?? 0" :show-indicator="false" :height="6" style="width: 40px;" />
-              <span class="text-13px font-medium text-primary">{{ p.virtualProgress ?? 0 }}%</span>
+              <NProgress :percentage="p.investProgress ?? 0" :show-indicator="false" :height="6" style="width: 40px;" />
+              <span class="text-13px font-medium text-primary">{{ p.investProgress ?? 0 }}%</span>
             </div>
           </div>
 
